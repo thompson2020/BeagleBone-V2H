@@ -3,6 +3,8 @@ use crate::error::IndraError;
 use crate::global_state::OperationMode;
 use crate::log_error;
 use crate::pre_charger::PreCharger;
+use crate::meter::update_from_mqtt;
+
 use lazy_static::lazy_static;
 use log::info;
 use serde::Serialize;
@@ -13,6 +15,8 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
 
 use super::config::MqttConfig;
+use crate::data_io::config::MeterConfig;
+
 
 lazy_static! {
     pub static ref CHADEMO_DATA: Arc<RwLock<MqttChademo>> =
@@ -53,25 +57,36 @@ impl MqttChademo {
     }
 }
 
-pub async fn mqtt_task(config: MqttConfig) -> Result<(), IndraError> {
+// MQTT Meter - read the mqttConfig as well as the meter config so we can subscribe and get meter readings from mqtt if necessary
+pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Result<(), IndraError> {
     use rumqttc::{AsyncClient, MqttOptions, QoS};
 
     log::info!("Starting MQTT thread {}", tokio::task::id());
-    if !config.enabled {
+    if !mqtt_config.enabled {
         log::warn!("MQTT not enabled in config");
         return Ok(());
     }
-
-    let mut mqttoptions = MqttOptions::new(config.client_id, config.host, config.port);
+    
+	// Clone the values we need BEFORE they are moved into mqttoptions
+    let client_id = mqtt_config.client_id.clone();
+    let host = mqtt_config.host.clone();
+    let port = mqtt_config.port;
+    let mut mqttoptions = MqttOptions::new(client_id, host, port);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
-    mqttoptions.set_credentials(config.username, config.password);
+    let username = mqtt_config.username.clone();
+    let password = mqtt_config.password.clone();
+    mqttoptions.set_credentials(username, password);
     mqttoptions.set_transport(rumqttc::Transport::Tcp);
     mqttoptions.set_clean_session(true);
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 2);
-    tokio::spawn(async move {
+    // Clone configs for the spawned task so we can still use them later in this function
+    let mqtt_config_clone = mqtt_config.clone();
+    let meter_config_clone = meter_config.clone();
+	
+	tokio::spawn(async move {
         loop {
             if let Ok(mqtt_event) = eventloop.poll().await {
-                if let ControlFlow::Break(_) = handle_mqtt_event(mqtt_event).await {
+                if let ControlFlow::Break(_) = handle_mqtt_event(mqtt_event, &mqtt_config_clone, &meter_config_clone).await {
                     continue;
                 }
             };
@@ -79,10 +94,27 @@ pub async fn mqtt_task(config: MqttConfig) -> Result<(), IndraError> {
     });
 
     client
-        .subscribe(&config.sub, QoS::AtLeastOnce)
+        .subscribe(&mqtt_config.sub, QoS::AtLeastOnce)
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
-    let interval = config.interval;
+    
+	//MQTT meter Subscribe to meter topic only if source is set to "mqtt" in config.toml
+    if meter_config.source == "mqtt" {
+        let meter_topic = meter_config.mqtt_topic_power.clone();   // use value from config.toml
+        log::info!("MQTT meter: subscribing to topic from config: {}", meter_topic);
+
+        client
+            .subscribe(&meter_topic, QoS::AtMostOnce)
+            .await
+            .map_err(|e| IndraError::MqttSub(e))?;
+
+        log::info!("MQTT meter: successfully subscribed to: {}", meter_topic);
+    } else {
+        log::info!("MQTT meter: source is not 'mqtt', skipping meter subscription");
+    }
+
+
+    let interval = mqtt_config.interval;
     loop {
         sleep(Duration::from_secs(interval.into())).await;
 
@@ -94,7 +126,7 @@ pub async fn mqtt_task(config: MqttConfig) -> Result<(), IndraError> {
                 continue;
             }
         };
-        let topic = config.topic.clone();
+        let topic = mqtt_config.topic.clone();
         info!("Sending: {}={msg}", &topic);
 
         // spawn to avoid latency spikes
@@ -111,25 +143,45 @@ pub async fn mqtt_task(config: MqttConfig) -> Result<(), IndraError> {
     }
 }
 
-async fn handle_mqtt_event(mqtt_event: rumqttc::Event) -> ControlFlow<()> {
+async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig, meter_config: &MeterConfig) -> ControlFlow<()> {
     use rumqttc::Event::*;
+
     match mqtt_event {
-        Incoming(_mqtt_in) => {
-            // use rumqttc::Packet::*;
-            // log::debug!("Incoming {:?}", mqtt_in);
-            // if let Publish(msg) = mqtt_in {
-            //     *CARDATA.lock().await = match serde_json::from_slice::<Data>(&msg.payload) {
-            //         Ok(json) => json.inner,
-            //         Err(e) => {
-            //             log::error!("{e:?}");
-            //             return ControlFlow::Break(());
-            //         }
-            //     };
-            // }
+        Incoming(mqtt_in) => {
+            if let rumqttc::Packet::Publish(msg) = mqtt_in {
+                if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
+                    log::info!("MQTT Message received → Topic: '{}' | Payload: '{}'", 
+                               msg.topic, payload);
+
+                    // Check if this is a command from the web GUI
+                    if msg.topic == mqtt_config.sub {
+                        log::info!("MQTT : command received via MQTT on '{}' - not implemented yet", msg.topic);
+						// use rumqttc::Packet::*;
+						// log::debug!("Incoming {:?}", mqtt_in);
+						// if let Publish(msg) = mqtt_in {
+						//     *CARDATA.lock().await = match serde_json::from_slice::<Data>(&msg.payload) {
+						//         Ok(json) => json.inner,
+						//         Err(e) => {
+						//             log::error!("{e:?}");
+						//             return ControlFlow::Break(());
+						//         }
+						//     };
+						// }
+                    }
+
+                    // If it's our meter topic, pass raw payload to meter.rs
+                    if msg.topic == meter_config.mqtt_topic_power {
+                        log::info!("MQTT meter message received - Processing Readings");
+                        crate::meter::update_from_mqtt(payload).await;
+                    }
+                }
+            }
         }
+
         Outgoing(_mqtt_out) => {
             // log::debug!("Outgoing {:?}", mqtt_out);
         }
     }
+
     ControlFlow::Continue(())
 }

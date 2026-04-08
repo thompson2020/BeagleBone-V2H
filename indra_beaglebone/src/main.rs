@@ -1,6 +1,5 @@
 // #![allow(dead_code)]
 #![allow(unused_imports)]
-#![feature(async_closure)]
 use chademo::{
     ev_connect,
     state::{self},
@@ -36,7 +35,6 @@ static POOL: OnceCell<Database> = OnceCell::const_new();
  *      API
  *          Add GetParams and return error with message (add to JS)
  *          Access config (write to disk on save) (server done)
- *          
  *
  *      Config
  *          Min/max V2H SoC - web ui
@@ -76,7 +74,7 @@ async fn main() -> Result<(), &'static str> {
     tokio::spawn(scheduler::init(events_rx, mode_tx.clone()));
     tokio::spawn(api::run(events_tx, mode_tx.clone()));
     tokio::spawn(data_io::db::init(10_000));
-    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone()));
+    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone(), app_config.meter.clone())); // MQTT meter - added meter config
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let mut ctrl_c =

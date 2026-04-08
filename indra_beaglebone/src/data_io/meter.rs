@@ -12,13 +12,38 @@ use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
+// MQTT meter additions
+use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
 lazy_static::lazy_static! {
     pub static ref METER: Arc<RwLock<Option<f32>>> = Arc::new(RwLock::new(Some(0f32)));
 }
 
+// MQTT meter additions
+lazy_static::lazy_static! {
+    pub static ref LAST_METER_UPDATE: Arc<Mutex<Instant>> = 
+        Arc::new(Mutex::new(Instant::now()));
+}
+
 pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
     log::info!("Starting Meter thread {}", tokio::task::id());
+
+
+    // MQTT meter additions - Check which meter source to use
+    match config.source.as_str() {
+        "mqtt" => {
+            log::info!("MQTT meter: using MQTT source for meter readings (Modbus code skipped)");
+            // meter subscribe is now handled in mqtt.rs
+            tokio::spawn(start_meter_staleness_checker(config));
+            return Ok(());
+        }
+        "modbus" | _ => {
+            log::info!("Using Modbus meter source (default)");
+            // Existing Modbus code continues below...
+        }
+    }
+
+
     // let config = &APP_CONFIG.clone();s
     let address = config.address.clone();
     let socket_addr: SocketAddr = address
@@ -86,6 +111,39 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
         drop(stream)
     }
 }
+
+// MQTT additions - Called from mqtt.rs when a new meter value arrives via MQTT
+pub async fn update_from_mqtt(payload: String) {
+    let payload_trim = payload.trim();
+
+    if let Ok(val) = payload_trim.parse::<f32>() {
+		*METER.write().await = Some(val);
+        CHADEMO_DATA.write().await.from_meter(val);
+        *LAST_METER_UPDATE.lock().await = Instant::now();   
+		log::info!("MQTT meter: updated value {:.2} kW", val);
+    } else {
+        log::warn!("MQTT meter: failed to parse meter value from MQTT: {}", payload_trim);
+    }
+}
+
+// Background task to check if meter data is stale
+pub async fn start_meter_staleness_checker(meter_config: MeterConfig) {
+    loop {
+        sleep(Duration::from_secs(10)).await;
+
+        let age = LAST_METER_UPDATE.lock().await.elapsed().as_secs();
+        log::warn!("MQTT meter: data age ({} seconds old)", age);
+        if age > meter_config.mqtt_meter_timeout_seconds {
+            log::warn!("MQTT meter: data is stale ({} seconds old) - treating as offline", age);
+            *METER.write().await = None;
+            CHADEMO_DATA.write().await.from_meter(0.0);
+        }
+    }
+}
+
+
+
+
 
 fn energy_modbus_rtu_request(
     device_id: u8,

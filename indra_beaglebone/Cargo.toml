@@ -6,8 +6,6 @@ authors = ["DG <dgaudie@me.com>"]
 description = "BBG software implementation for the Indra CHAdeMO bidirectional charger"
 
 
-[profile.release]
-iopt-level = "z"
 # lto = "fat"
 codegen-units = 1
 
