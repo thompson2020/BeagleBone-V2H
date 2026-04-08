@@ -5,7 +5,6 @@ members = ["indra_beaglebone",
 "chademo_v2"]
 
 [profile.dev]
-codegen-units = 1
 debug = 2
 debug-assertions = true 
 incremental = false
@@ -13,7 +12,8 @@ opt-level = 1
 overflow-checks = true  
 
 [profile.release]
-iopt-level = "z"
+opt-level = "z"
+codegen-units = 1
 lto = "thin"
 # codegen-units = 4
 [patch.crates-io]

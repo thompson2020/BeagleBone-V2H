@@ -12,4 +12,19 @@ sub = "your/cmd_sub"
 interval = 10                # seconds
 
 [meter]
+source = "modbus"          		# Choose meter source: "modbus" or "mqtt"
+
+# === Modbus settings (used when source = "modbus") ===
 address = "your-rtu-over-tcp-meter-address:port"
+
+# === MQTT settings (used when source = "mqtt") ===
+mqtt_broker = "192.168.10.100:1883"
+mqtt_username = ""         		# leave empty if no auth
+mqtt_password = ""
+mqtt_topic_power  = "mbmd2/zappi/power" # Individual topics (matching your mbmd style)
+
+# === Individual Phase Power - Only needed on 3 phase setup to limit the export per phase ==
+mqtt_topic_powerlCurrentPhase = "mbmd2/zappi/powerl1"
+
+# Staleness protection (in seconds)
+mqtt_meter_timeout_seconds = 120      # 2 minutes - if no update, treat meter as offline

@@ -31,6 +31,10 @@ pub struct MqttConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct MeterConfig {
     pub address: String,
+	// MQTT meter additions (seperate to mqtt status)
+	pub source: String,                    		// "modbus" or "mqtt"
+    pub mqtt_topic_power: String,
+    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout
 }
 
 #[derive(Debug, Deserialize, Clone)]
