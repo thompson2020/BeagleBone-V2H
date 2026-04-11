@@ -6,7 +6,7 @@ lazy_static::lazy_static! {
     pub static ref APP_CONFIG: Arc<AppConfig> = {
         let config_file = "config.toml";
         let toml_str = fs::read_to_string(config_file)
-            .expect(&format!("Failed to read configuration file: {}", config_file));
+            .expect(&format!("Failed to read configuration file:  | {}", config_file));
         let config = match toml::from_str(&toml_str) {
             Ok(t) => t,
             Err(e) => panic!("TOML parse fail {e:?}"),

@@ -62,7 +62,7 @@ pub struct Buttons([Pin; 2]);
 
 async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Error> {
     pin.export().expect(&format!(
-        "Could not initialise button pin {}",
+        "Could not initialise button pin  | {}",
         pin.get_pin_num()
     ));
     pin.set_direction(Direction::In)?;
@@ -102,11 +102,11 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
 }
 
 pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Result<(), IndraError> {
-    log::info!("Starting panel_event_listener {}", tokio::task::id());
+    log::info!("Starting panel_event_listener  | {}", tokio::task::id());
     let dev = I2cdev::new("/dev/i2c-2").expect("Cannot access /dev/i2c-2");
     let mut pca = Pca9552::new(dev);
     if let Err(e) = pca.init().await {
-        log::error!("I2C init failed {e:?}")
+        log::error!("I2C init failed | {e:?}")
     };
 
     tokio::spawn(async move {
@@ -124,7 +124,7 @@ pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Resu
                     LedCommand::SocBar(val) => pca.lower_from_percentage(val),
                 };
                 if let Err(e) = result {
-                    log::error!("{e:?}")
+                    log::error!("panel_event_listener Error | {e:?}")
                 }
             }
         }

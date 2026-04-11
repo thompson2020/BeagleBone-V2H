@@ -19,7 +19,7 @@ use crate::{
     timeout_condition, MAX_AMPS, MAX_SOC, METER_BIAS, MIN_SOC,
 };
 use chademo_v2::{X109Status, X108};
-use log::warn;
+//use log::warn;
 use std::{sync::Arc, time::Duration};
 use sysfs_gpio::Pin;
 use tokio::{
@@ -31,7 +31,7 @@ use tokio_socketcan::{CANFrame, CANSocket};
 const DUMMYMODE: bool = false;
 
 pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError> {
-    log::info!("Starting EV thread");
+    log::info!("Starting thread: EV ");
 
     // let operational_mode = OPERATIONAL_MODE.clone();
     let mut chademo = Chademo::new();
@@ -44,7 +44,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
     let mut handles: Vec<JoinHandle<Result<(), IndraError>>> = Vec::new(); // Store spawned task handles
     loop {
         for handle in handles.drain(..) {
-            log::info!("Aborting Pre thread {}", handle.id());
+            log::info!("Aborting Pre thread  | {}", handle.id());
             handle.abort(); // Abort the previous tasks
         }
         reset_gpio_state(&mut chademo);
@@ -79,21 +79,21 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             {
                 Ok(reason) => reason,
                 Err(e) => {
-                    log::error!("Bailed out of main charge {e:?}");
+                    log::error!("Bailed out of main charge | {e:?}");
                     OperationMode::Idle
                 }
             };
             continue;
         }
-        log::info!("{:?} active", chademo.state());
+        log::info!("Operational Mode: | {:?}", chademo.state());
         // Spawn new task
         let handle = tokio::spawn(pre_thread::init(pre_rx.clone()));
-        log::info!("Spawned new Pre thread {}", handle.id());
+        log::info!("Spawned new Pre thread  | {}", handle.id());
         handles.push(handle);
         chademo.charge_stop();
         chademo.pins().pre_ac.set_value(1).unwrap();
         if let Err(e) = init_pre(&predata, t100ms, &pre_tx).await {
-            log::error!("Pre init failed - {e:?}");
+            log::error!("Pre init failed - | {e:?}");
 
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
@@ -108,7 +108,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 
         log::info!("Check can frames & Wait for K line");
         if let Err(e) = k_line(&mut can, &mut chademo).await {
-            log::error!("K line init failed - is car connected? {e:?}");
+            log::error!("K line init failed - is car connected? | {e:?}");
 
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
@@ -128,7 +128,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         log::info!("when voltage match - raise D2");
         chademo.charge_start();
         if let Err(e) = precharge(&mut can, &mut chademo, &pre_tx, &predata).await {
-            log::error!("precharge & contactor init failed - should be catastropic and hang {e:?}");
+            log::error!("precharge & contactor init failed - should be catastropic and hang | {e:?}");
 
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
@@ -147,14 +147,14 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             match charge_mode(&mut chademo, &mut can, &pre_tx, &led_tx, mode_rx.clone()).await {
                 Ok(reason) => reason,
                 Err(e) => {
-                    log::error!("Bailed out of main charge {e:?}");
+                    log::error!("Bailed out of main charge | {e:?}");
                     OperationMode::Idle
                 }
             };
 
         // end charge ========================================================
 
-        log::warn!("End of init fn 'end charge' with exit reason {exit_reason:?}");
+        log::warn!("End of init fn 'end charge' with exit reason | {exit_reason:?}");
         update_chademo_mutex(&chademo).await;
         chademo.x109.status = X109Status::from(0x24);
         // chademo.charging_stop_control_release();
@@ -173,17 +173,17 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
     let mut contactors = true;
     loop {
-        log::debug!("{}", chademo.x102.status);
+        log::debug!(" | {}", chademo.x102.status);
         match timeout(Duration::from_millis(200), recv_send(can, chademo, false)).await {
             Ok(Ok(_)) => (),
             Ok(Err(e)) => {
-                log::error!("CAN error on closure {:?}", e);
+                log::error!("CAN error on closure | {:?}", e);
                 if !contactors {
                     break;
                 }
             }
             Err(e) => {
-                log::warn!("CAN timed out on closure {:?}", e);
+                log::warn!("CAN timed out on closure | {:?}", e);
                 if !contactors {
                     break;
                 }
@@ -197,10 +197,10 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
         if contactors {
             log::info!("Contactors opening");
             if chademo.pins().c1.set_value(0).is_ok() {
-                print!("\x07");
+                print!("\x07"); // Bell Sound
                 if chademo.pins().c2.set_value(0).is_ok() {
-                    print!("\x07");
-                    warn!("                                       !!!!CONTACTORS OPEN!!!!");
+                    print!("\x07"); // Bell Sound
+                    log::warn!("                                       !!!!CONTACTORS OPEN!!!!");
 
                     contactors = false;
                     chademo.x109.status = X109Status::from(0x25);
@@ -279,7 +279,7 @@ async fn charge_mode(
             // listen for incomming mode changes
             if let Ok(op) = mode_rx.try_recv() {
                 update_panel_leds(&led_tx, &chademo).await;
-                log::info!("New CHAdeMO mode received {op:?}");
+                log::info!("New CHAdeMO mode received | {op:?}");
                 chademo.set_state(op);
                 update_chademo_mutex(chademo).await;
             }
@@ -380,7 +380,7 @@ async fn init_pre(
     let mut counter = 0;
     while !c {
         if counter > 20 {
-            log::error!("Initalise PRE stage 1 timed out after {counter}s");
+            log::error!("Initalise PRE stage 1 timed out after | {counter}s");
             return Err(IndraError::Timeout);
         }
         sleep(Duration::from_millis(1000)).await;
@@ -398,7 +398,7 @@ async fn init_pre(
     counter = 0;
     while !c {
         if counter > 5 {
-            log::error!("Initalise PRE stage 2 timed out after {counter}s");
+            log::error!("Initalise PRE stage 2 timed out after | {counter}s");
             return Err(IndraError::Timeout);
         }
         sleep(Duration::from_millis(1000)).await;
@@ -452,7 +452,7 @@ async fn precharge(
     while counter != 0 {
         counter -= 1;
         recv_send(can, chademo, true).await?;
-        log::debug!("Counter {counter}");
+        log::debug!("Counter | {counter}");
         let x102status: u8 = chademo.x102.status.into();
         let x109status: u8 = chademo.x109.status.into();
 
@@ -467,7 +467,7 @@ async fn precharge(
             if &old_soc != chademo.soc() {
                 old_soc = *chademo.soc();
                 log_error!(
-                    format!("SoC at {}", chademo.soc()),
+                    format!("SoC at  | {}", chademo.soc()),
                     pre_tx
                         .send(PreCommand::DcVoltsSetpoint(chademo.soc_to_voltage()))
                         .await
@@ -536,15 +536,15 @@ fn limit_setpoint_amps(setpoint_amps: f32, chademo: &Chademo) -> f32 {
     let soc = *chademo.soc();
     if matches!(chademo.state(), OperationMode::V2h) {
         if MIN_SOC >= soc && setpoint_amps.is_sign_negative() {
-            warn!("SoC: {} too low, discharge disabled", soc);
+            log::warn!("SoC: too low, discharge disabled | {} %", soc);
             0.0
         } else if MAX_SOC <= soc && setpoint_amps.is_sign_positive() {
-            warn!("SoC: {} too high, charge disabled", soc);
+            log::warn!("SoC: too high, charge disabled | {} %", soc);
             0.0
         } else if setpoint_amps.is_sign_positive()
             && setpoint_amps > chademo.x102.charging_current_request as f32
         {
-            warn!(
+            log::warn!(
                 "Charge taper: {}A too high, charge restricted to {}A",
                 setpoint_amps, chademo.x102.charging_current_request
             );
@@ -600,14 +600,14 @@ mod test {
     fn test_x109() {
         // let mut chademo = Chademo::new();
         let mut x109 = X109::new(3, true);
-        println!("{:02x}", Into::<u8>::into(x109.status));
+        println!("{:02x}", Into::<u8>::into(x109.status));  //test code
         assert!(!x109.status.status_vehicle_connector_lock);
         assert!(!x109.status.status_station);
         x109.status = 0x24.into();
-        println!("{:02x}", Into::<u8>::into(x109.status));
+        println!("{:02x}", Into::<u8>::into(x109.status));  //test code
         assert!(x109.status.status_vehicle_connector_lock);
         x109.status = 0x05.into();
-        println!("{:02x}", Into::<u8>::into(x109.status));
+        println!("{:02x}", Into::<u8>::into(x109.status)); //test code
         assert!(x109.status.status_vehicle_connector_lock);
         assert!(x109.status.status_station);
     }

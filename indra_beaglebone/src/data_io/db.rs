@@ -36,8 +36,8 @@ pub async fn init(update_millisecs: u64) -> Result<(), IndraError> {
 
         if let Some(db) = POOL.get() {
             match db.add_record(&(row).into()).await {
-                Ok(sql) => log::info!("#{} db row added", sql.last_insert_rowid()),
-                Err(e) => log::error!("db {e:?}"),
+                Ok(sql) => log::info!("db row added | #{} ", sql.last_insert_rowid()),
+                Err(e) => log::error!("db | {e:?}"),
             };
         };
         let remaining = update_period - instant.elapsed();
@@ -104,13 +104,13 @@ pub struct Database {
 impl Database {
     pub async fn new() -> Result<Self, IndraError> {
         let create_tables = if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
-            println!("Creating database {}", DB_URL);
+            log::info!("Creating new database at {}", DB_URL);        // ← Changed to log::info!
             Sqlite::create_database(DB_URL)
                 .await
                 .map_err(|_e| IndraError::Error)?;
             true
         } else {
-            println!("Database already exists");
+            log::info!("Database already exists");
             false
         };
         let pool = PoolOptions::new()
@@ -244,11 +244,12 @@ mod test {
         let db = db.unwrap();
         let result = db.add_record(&ChademoDbRow::default()).await;
         assert!(result.is_ok());
-        println!("Query result: {:?}", result);
+        log::info!("DB: Added record | last_insert_rowid = {:?}", result.last_insert_rowid());
+
 
         let results = db.get_all_records().await;
         for result in results.unwrap() {
-            println!("[{:?}] ", result);
+            log::info!("DB: Retrieved record | {:?}", result);  
         }
     }
 }

@@ -621,7 +621,8 @@ mod test {
         )
         .unwrap();
         let x102: X102 = X102::from(&frame);
-        println!("{}", x102.status);
+        log::debug!("X102 status: | {}", x102.status);
+
         assert!(!x102.contactors_closed());
 
         let frame = CANFrame::new(
@@ -633,7 +634,7 @@ mod test {
         .unwrap();
         let x102: X102 = X102::from(&frame);
         assert!(x102.can_close_contactors());
-        println!("{}", x102.status);
+        log::debug!("X102 status: | {}", x102.status);
 
         let frame = CANFrame::new(
             0x102,

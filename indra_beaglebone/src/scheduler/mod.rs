@@ -76,7 +76,7 @@ pub async fn init(mut ev: EventsRx, mode_tx: ChademoTx) {
         .expect("Failed to deserialize events");
     // Sort earliest event first
     events.0.sort_by(|a, b| a.time.cmp(&b.time));
-    log::info!("Loaded {:#?}", events);
+    log::info!("Loaded Events from file | {:?}", events);
 
     let mut handles: Vec<JoinHandle<()>> = Vec::new(); // Store spawned task handles
 
@@ -84,7 +84,7 @@ pub async fn init(mut ev: EventsRx, mode_tx: ChademoTx) {
         if let Some(mut new_events) = ev.recv().await {
             new_events.0.sort_by(|a, b| a.time.cmp(&b.time));
             if let Err(e) = update_eventfile(&new_events).await {
-                log::error!("Events store fail {e:?}");
+                log::error!("Events store fail  | {e:?}");
                 continue;
             };
 
@@ -97,11 +97,11 @@ pub async fn init(mut ev: EventsRx, mode_tx: ChademoTx) {
 
             sleep(Duration::from_secs(1)).await;
             new_events.0.sort_by(|a, b| a.time.cmp(&b.time));
-            log::info!("Spawning new scheduler: {new_events:?}");
+            log::info!("Spawning new scheduler: | {new_events:?}");
 
             // Spawn new task
             let handle = tokio::spawn(process_events(new_events, mode_tx.clone()));
-            log::info!("Spawned new scheduler {}", handle.id());
+            log::info!("Spawned new scheduler | {}", handle.id());
             handles.push(handle);
         }
     }
@@ -162,25 +162,25 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
     loop {
         let mut todays_events = events.clone();
         let id = tokio::task::id().to_string();
-        log::warn!("{id} New thread");
+        log::warn!("New process_events thread started | task_id {id} New thread");
         if let Some(event) = todays_events.0.pop() {
             let current_time = chrono::Local::now().time();
             let next_event_time = event.time;
             if current_time > next_event_time {
                 // skip old
-                log::warn!("{id} Skipping over expired event {event:?}");
+                log::warn!("Skipping over expired event | task_id={id} action={event:?}");
             } else if current_time <= next_event_time {
                 let time_until_next_event = next_event_time - current_time;
                 let sleep_duration =
                     Duration::from_secs(time_until_next_event.num_seconds() as u64);
                 log::info!(
-                    "{id} Waiting {sleep_duration:?} until next event ({:?} {:?})",
+                    "Waiting until Next Event | task_id={id} wait={sleep_duration:?} time={:?} action={:?}",
                     event.time,
                     event.action
                 );
                 sleep(sleep_duration).await;
                 if let Err(e) = mode_tx.send(event.into()).await {
-                    log::error!("{e:?}")
+                    log::error!("Failed to send scheduled mode change | task_id={id} error={e:?}")
                 };
             }
         }

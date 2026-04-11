@@ -16,7 +16,7 @@ use tokio::time::{sleep, timeout, Instant};
 use tokio_socketcan::CANFrame;
 
 pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
-    log::info!("Starting Pre thread {}", tokio::task::id());
+    log::info!("Starting Pre thread  | {}", tokio::task::id());
     let t100ms = Duration::from_millis(100);
     let mut pre = PreCharger::default();
     let mut can_socket =
@@ -43,7 +43,7 @@ pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
         update_fan(&mut pre, &mut fan);
 
         if let Ok(cmd) = pre_rx.try_recv() {
-            log::debug!("Received {cmd:?}");
+            log::debug!("Received | {cmd:?}");
             if !matches!(cmd, PreCommand::Shutdown) {
                 write_pre(cmd, &mut can_socket, t100ms / 10, &mut pre).await;
             } else {
@@ -71,7 +71,7 @@ pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
 
         // 1 sec Pre stats
         if counter > 10 {
-            println!("{}", pre);
+            log::info!("PRE status | {}", pre);     // ← Now uses your standard format
             counter = 0;
         }
         if instant.elapsed().as_millis().gt(&99) {
@@ -89,7 +89,7 @@ async fn write_pre(
     t100ms: Duration,
     pre: &mut PreCharger,
 ) {
-    log::debug!("New pre_cmd {:?}", cmd);
+    log::debug!("New pre_cmd | {:?}", cmd);
     let frame = cmd.to_can();
     if let Ok(rx) = can_send_recv(can_socket, frame, t100ms).await {
         log_error!("Send pre cmd", pre.from_slice(rx.data()));

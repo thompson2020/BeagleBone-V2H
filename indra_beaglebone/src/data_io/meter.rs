@@ -26,13 +26,13 @@ lazy_static::lazy_static! {
 }
 
 pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
-    log::info!("Starting Meter thread {}", tokio::task::id());
+    log::info!("Starting thread: meter   | {}", tokio::task::id());
 
 
     // MQTT meter additions - Check which meter source to use
     match config.source.as_str() {
         "mqtt" => {
-            log::info!("MQTT meter: using MQTT source for meter readings (Modbus code skipped)");
+            log::info!("Using MQTT meter source");
             // meter subscribe is now handled in mqtt.rs
             tokio::spawn(start_meter_staleness_checker(config));
             return Ok(());
@@ -50,7 +50,7 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
         .parse::<SocketAddr>()
         .map_err(|e| IndraError::SocketError(e))?;
     log::info!(
-        "Connecting to RTU meter: IP:{:?} port:{}",
+        "Connecting to RTU meter:  | IP:{:?} port:{}",
         socket_addr.ip(),
         socket_addr.port()
     );
@@ -68,14 +68,14 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
 
         let request =
             energy_modbus_rtu_request(device_id, function_code, starting_address, quantity);
-        log::info!("SDM230 modbus PDU: {request:02x?}");
+        log::info!("SDM230 modbus PDU: | {request:02x?}");
         let mut val = 0.1f32;
 
         'inner: loop {
             let mut buf = [0u8; 24];
             let instant = Instant::now();
             if let Err(e) = tx.write(&request).await {
-                log::error!("TCP write error {e:?}");
+                log::error!("TCP write error | {e:?}");
                 break 'inner;
             }
 
@@ -88,7 +88,7 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
                     }
                 }
                 Err(e) => {
-                    log::error!("Meter TCP timeout {e:?}");
+                    log::error!("Meter TCP timeout | {e:?}");
                     break 'inner;
                 }
                 _ => {
@@ -96,7 +96,7 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
                     break 'inner;
                 }
             };
-            log::info!("Meter value {} ", val);
+            log::info!("Meter value  | {} ", val);
             {
                 *METER.clone().write().await = Some(val);
             }
@@ -120,9 +120,9 @@ pub async fn update_from_mqtt(payload: String) {
 		*METER.write().await = Some(val);
         CHADEMO_DATA.write().await.from_meter(val);
         *LAST_METER_UPDATE.lock().await = Instant::now();   
-		log::info!("MQTT meter: updated value {:.2} kW", val);
+        log::info!("MQTT meter: updated value | {:.2} W", val);
     } else {
-        log::warn!("MQTT meter: failed to parse meter value from MQTT: {}", payload_trim);
+        log::warn!("MQTT meter: failed to parse meter value from MQTT:  | {}", payload_trim);
     }
 }
 
@@ -132,9 +132,9 @@ pub async fn start_meter_staleness_checker(meter_config: MeterConfig) {
         sleep(Duration::from_secs(10)).await;
 
         let age = LAST_METER_UPDATE.lock().await.elapsed().as_secs();
-        log::warn!("MQTT meter: data age ({} seconds old)", age);
+        log::debug!("MQTT meter: data age  | {} seconds", age);
         if age > meter_config.mqtt_meter_timeout_seconds {
-            log::warn!("MQTT meter: data is stale ({} seconds old) - treating as offline", age);
+            log::error!("MQTT meter: data is stale - treating as offline  | {} seconds", age);
             *METER.write().await = None;
             CHADEMO_DATA.write().await.from_meter(0.0);
         }

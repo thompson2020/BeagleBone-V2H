@@ -1,7 +1,7 @@
 use crate::{error::IndraError, global_state::OperationMode, MAX_AMPS};
 use chademo_v2::*;
 use lazy_static::lazy_static;
-use log::warn;
+//use log::warn;
 use serde::Serialize;
 use std::{sync::Arc, time::Duration};
 use sysfs_gpio::Pin;
@@ -291,7 +291,7 @@ impl Chademo {
             .set_value(1)
             .map_err(|e| IndraError::PinAccess(e))?;
 
-        print!("\x07");
+        print!("\x07"); // Bell Sound
         //109.5.5
         self.charging_stop_control_set();
         Ok(())
@@ -471,7 +471,7 @@ mod test {
     #[test]
     fn x208_test() {
         let y = X208::new(1, 500, 16, 250);
-        println!(
+        println!(       //test code
             "{} {} {} {}",
             y.get_discharge_current(),
             y.get_input_voltage(),
@@ -487,7 +487,7 @@ mod test {
         assert!(cf.data()[3] == 0xff - 16);
 
         let y: X208 = X208::from(&cf);
-        println!(
+        println!(       //test code
             "{} {} {} {}",
             y.get_discharge_current(),
             y.get_input_voltage(),

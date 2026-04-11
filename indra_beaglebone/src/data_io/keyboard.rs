@@ -26,10 +26,10 @@ pub async fn scan_kb(pre_tx: PreTx, chademo_tx: ChademoTx) {
         let _ = std::io::stdin().lock();
         match std::io::stdin().read(&mut input) {
             Ok(_) => {
-                println!("Input received:");
-                println!("{:?}", input[0]);
+                println!("Input received:"); // keyboard response
+                println!("{:?}", input[0]); // keyboard response
             }
-            Err(e) => eprintln!("Error reading input: {}", e),
+            Err(e) => eprintln!("Error reading input:  | {}", e), // keyboard response
         };
         match input[0] {
             115 => {
@@ -38,7 +38,7 @@ pub async fn scan_kb(pre_tx: PreTx, chademo_tx: ChademoTx) {
                 *operational_mode.lock().await = OperationMode::Idle;
                 log_error!("kb", pre_tx.send(PreCommand::Disable).await);
                 if let Err(e) = chademo_tx.send(ChargerState::Idle).await {
-                    eprintln!("{e:?}")
+                    eprintln!("{e:?}") // keyboard response
                 };
             }
             100 => {
@@ -46,11 +46,11 @@ pub async fn scan_kb(pre_tx: PreTx, chademo_tx: ChademoTx) {
                 *operational_mode.lock().await = OperationMode::V2h;
                 if matches!(STATE.lock().await.0, ChargerState::Idle) {
                     if let Err(e) = chademo_tx.send(ChargerState::Stage1).await {
-                        eprintln!("{e:?}")
+                        eprintln!("{e:?}") // keyboard response
                     }
                 } else {
                     if let Err(e) = chademo_tx.send(ChargerState::Stage6).await {
-                        eprintln!("{e:?}")
+                        eprintln!("{e:?}") // keyboard response
                     }
                 }
             }
@@ -59,11 +59,11 @@ pub async fn scan_kb(pre_tx: PreTx, chademo_tx: ChademoTx) {
                 *operational_mode.lock().await = OperationMode::Charge(ChargeParameters::default());
                 if matches!(STATE.lock().await.0, ChargerState::Idle) {
                     if let Err(e) = chademo_tx.send(ChargerState::Stage1).await {
-                        eprintln!("{e:?}")
+                        eprintln!("{e:?}") // keyboard response
                     }
                 } else {
                     if let Err(e) = chademo_tx.send(ChargerState::Stage6).await {
-                        eprintln!("{e:?}")
+                        eprintln!("{e:?}") // keyboard response
                     }
                 }
             }
@@ -71,11 +71,11 @@ pub async fn scan_kb(pre_tx: PreTx, chademo_tx: ChademoTx) {
                 // "q" quit
                 log_error!("kb", pre_tx.send(PreCommand::Disable).await);
                 if let Err(e) = chademo_tx.send(ChargerState::Exiting).await {
-                    log::error!("{e:?}")
+                    log::error!("{e:?}") // keyboard response
                 };
-                println!(" q key captured. Exiting...");
+                println!(" q key captured. Exiting..."); //keyboard response
                 if let Err(e) = chademo_tx.send(ChargerState::Exiting).await {
-                    log::error!("{e:?}")
+                    log::error!("{e:?}") // keyboard response
                 };
             }
             _ => continue,

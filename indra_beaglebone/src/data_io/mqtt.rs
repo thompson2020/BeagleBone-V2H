@@ -6,7 +6,6 @@ use crate::pre_charger::PreCharger;
 use crate::meter::update_from_mqtt;
 
 use lazy_static::lazy_static;
-use log::info;
 use serde::Serialize;
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -61,7 +60,7 @@ impl MqttChademo {
 pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Result<(), IndraError> {
     use rumqttc::{AsyncClient, MqttOptions, QoS};
 
-    log::info!("Starting MQTT thread {}", tokio::task::id());
+    log::info!("Starting thread: mqtt_task   | {}", tokio::task::id());
     if !mqtt_config.enabled {
         log::warn!("MQTT not enabled in config");
         return Ok(());
@@ -101,16 +100,16 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Re
 	//MQTT meter Subscribe to meter topic only if source is set to "mqtt" in config.toml
     if meter_config.source == "mqtt" {
         let meter_topic = meter_config.mqtt_topic_power.clone();   // use value from config.toml
-        log::info!("MQTT meter: subscribing to topic from config: {}", meter_topic);
+        log::debug!("MQTT meter: subscribing to topic from config:  | {}", meter_topic);
 
         client
             .subscribe(&meter_topic, QoS::AtMostOnce)
             .await
             .map_err(|e| IndraError::MqttSub(e))?;
 
-        log::info!("MQTT meter: successfully subscribed to: {}", meter_topic);
+        log::debug!("MQTT meter: successfully subscribed to:  | {}", meter_topic);
     } else {
-        log::info!("MQTT meter: source is not 'mqtt', skipping meter subscription");
+        log::debug!("MQTT meter: source is not 'mqtt', skipping meter subscription");
     }
 
 
@@ -122,18 +121,19 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Re
         let msg = match serde_json::to_string(&*CHADEMO_DATA.read().await) {
             Ok(d) => d,
             Err(e) => {
-                log::error!("CHAdeMO Ser {e}");
+                log::error!("CHAdeMO Ser | {e}");
                 continue;
             }
         };
         let topic = mqtt_config.topic.clone();
-        info!("Sending: {}={msg}", &topic);
+        let msg_with_space = msg.replace(":", ": "); // Add space as my log viewer formats better 
+        log::debug!("MQTT Publishing Chademo Data:  | {} = {msg_with_space}", &topic);
 
         // spawn to avoid latency spikes
         let client_send = client.clone();
         tokio::task::spawn(async move {
             log_error!(
-                "MQTT SEND",
+                "MQTT Publishing Chademo Data:",
                 client_send
                     .publish(topic, QoS::AtLeastOnce, true, msg)
                     .await
@@ -150,12 +150,12 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
         Incoming(mqtt_in) => {
             if let rumqttc::Packet::Publish(msg) = mqtt_in {
                 if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
-                    log::info!("MQTT Message received → Topic: '{}' | Payload: '{}'", 
+                    log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'", 
                                msg.topic, payload);
 
                     // Check if this is a command from the web GUI
                     if msg.topic == mqtt_config.sub {
-                        log::info!("MQTT : command received via MQTT on '{}' - not implemented yet", msg.topic);
+                        log::warn!("MQTT : command received via MQTT on - not implemented yet ' | {}'", msg.topic);
 						// use rumqttc::Packet::*;
 						// log::debug!("Incoming {:?}", mqtt_in);
 						// if let Publish(msg) = mqtt_in {
@@ -171,7 +171,7 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
 
                     // If it's our meter topic, pass raw payload to meter.rs
                     if msg.topic == meter_config.mqtt_topic_power {
-                        log::info!("MQTT meter message received - Processing Readings");
+                        log::debug!("MQTT message from meter topic - Processing");
                         crate::meter::update_from_mqtt(payload).await;
                     }
                 }

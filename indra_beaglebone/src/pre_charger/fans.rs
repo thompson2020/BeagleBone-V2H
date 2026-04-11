@@ -77,7 +77,7 @@ impl Fan {
             } else {
                 log_error!("PWM enable", self.pwm.enable(true));
                 if let Err(e) = self.pwm.set_duty(self.duty.val) {
-                    log::error!("Duty update error {e}")
+                    log::error!("Duty update error | {e}")
                 }
             }
         };

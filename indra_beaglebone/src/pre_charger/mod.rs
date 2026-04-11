@@ -104,13 +104,13 @@ impl PreCharger {
             0x43 => {
                 // Ack
                 if let Ok(_this) = std::str::from_utf8(&s[4..8]) {
-                    // info!("Decoded ASCII: {_this}");
+                    // log::info!("Decoded ASCII: {_this}");
                 }
                 return Ok(());
             }
             0x60 => {
                 // Ack
-                // info!("WRITEACK");
+                // log::info!("WRITEACK");
                 return Ok(());
             }
             0x80 => {
@@ -120,7 +120,7 @@ impl PreCharger {
             }
             0x4b => (), // passthrough
             other => {
-                log::error!("Bad request decode {other}");
+                log::error!("Bad request decode | {other}");
                 return Err(IndraError::Error); // change to error
             }
         }
@@ -142,7 +142,7 @@ impl PreCharger {
                 self.status = [s[4], s[5]];
             }
             u => {
-                log::error!("Pre decode unknown address: {u:x}");
+                log::error!("Pre decode unknown address: | {u:x}");
                 return Err(IndraError::Error);
             }
         };

@@ -24,7 +24,9 @@ mod test {
             false,
         )
         .unwrap();
-        println!("{:?}", debug_frame(&frame));
+        //println!("{:?}", debug_frame(&frame));
+        let debug_str = debug_frame(&frame);
+        debug!("debug_frame output: {}", debug_str); 
         assert!(true)
     }
 }
@@ -81,7 +83,7 @@ async fn initalise(
     for (idx, frame) in init_frames().into_iter().enumerate() {
         let mut fail_count = 0u8;
         loop {
-            log::debug!("Pre-init stage {}/{}", idx + 1, init_frames().len());
+            log::debug!("Pre-init stage  | {}/{}", idx + 1, init_frames().len());
             sleep(t100ms * 2).await;
             let rx = match can_send_recv(can_socket, frame, t100ms).await {
                 Ok(rx) => rx,
