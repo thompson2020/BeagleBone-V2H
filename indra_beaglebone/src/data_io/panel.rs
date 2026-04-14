@@ -102,7 +102,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
 }
 
 pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Result<(), IndraError> {
-    log::info!("Starting panel_event_listener  | {}", tokio::task::id());
+    log::info!("Starting thread: panel_event_listener  | {}", tokio::task::id());
     let dev = I2cdev::new("/dev/i2c-2").expect("Cannot access /dev/i2c-2");
     let mut pca = Pca9552::new(dev);
     if let Err(e) = pca.init().await {
@@ -129,7 +129,7 @@ pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Resu
             }
         }
     });
-    log::info!("Starting buttons event listener");
+    log::debug!("Starting buttons event listener");
     let onoff = Pin::new(ONOFFPIN);
     let boost = Pin::new(BOOSTPIN);
     let buttons = Buttons { 0: [onoff, boost] };

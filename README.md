@@ -27,3 +27,6 @@ Todo:
 Crosscompile using [ZigBuild](https://github.com/rust-cross/cargo-zigbuild)
 
 ```cargo zigbuild --target arm-unknown-linux-musleabihf --release```
+```cargo zigbuild --target arm-unknown-linux-musleabihf --release --features tracing,logging-verbose```
+    tracing - to send debug messages to the v2h_webui
+    logging-verbose - to get more log messages

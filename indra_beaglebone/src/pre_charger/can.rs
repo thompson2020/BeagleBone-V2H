@@ -26,7 +26,7 @@ mod test {
         .unwrap();
         //println!("{:?}", debug_frame(&frame));
         let debug_str = debug_frame(&frame);
-        debug!("debug_frame output: {}", debug_str); 
+        log::debug!("debug_frame output: {}", debug_str); 
         assert!(true)
     }
 }
@@ -129,7 +129,7 @@ pub async fn enabled_wait(
             sleep(t100ms).await;
             if let Ok(rx) = can_send_recv(can_socket, status_frame(), t100ms).await {
                 if pre.from_slice(rx.data()).is_ok() {
-                    log::info!("Status ok");
+                    log::debug!("Status ok");
                     break;
                 };
             }

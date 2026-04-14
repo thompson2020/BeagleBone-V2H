@@ -59,9 +59,9 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
                 
             // Log important "Set" commands at INFO level
             if cmd.contains("\"SetMode\"") {
-                log::info!("SetMode command received from client");
+                log::warn!("SetMode command received from client");
             } else if cmd.contains("\"SetEvents\"") {
-                log::info!("SetEvents command received from client");
+                log::warn!("SetEvents command received from client");
             }
                 
                 cmd
@@ -119,6 +119,10 @@ fn process_ws_message(
                 });
                 let response = Response::Mode(mode);
                 log::info!("SetMode Response to Client | {:?}", response);
+                log::debug!("SetMode - variable 'cmd'| {:?}", cmd );
+                log::debug!("SetMode - d.cmd matched as Cmd::SetMode");
+                log::debug!("SetMode - variable 'mode' | (deserialized OperationMode): {:?}", mode);
+                log::debug!("SetMode - variable 'mode_tx' (original sender) | {:?}", mode_tx);   // may show channel info
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
             Cmd::GetMode => {
@@ -155,7 +159,7 @@ fn process_ws_message(
                     Err(_) => return Ok(Message::Text(BAD_ACK.to_owned())),
                 };
                 let response = Response::Events(events);
-                log::info!("GetEvents response to client | {:?}", response);
+                log::debug!("GetEvents response to client | {:?}", response);
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
             Cmd::GetRecords(params) => {

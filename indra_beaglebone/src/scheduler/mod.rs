@@ -75,13 +75,23 @@ pub async fn init(mut ev: EventsRx, mode_tx: ChademoTx) {
         .try_into()
         .expect("Failed to deserialize events");
     // Sort earliest event first
-    events.0.sort_by(|a, b| a.time.cmp(&b.time));
+    //events.0.sort_by(|a, b| a.time.cmp(&b.time));
+    // Sort so earliest event is LAST (so .pop() gets the earliest)
+    events.0.sort_by(|a, b| b.time.cmp(&a.time));
     log::info!("Loaded Events from file | {:?}", events);
 
     let mut handles: Vec<JoinHandle<()>> = Vec::new(); // Store spawned task handles
+ 
+    // Start scheduler immediately with loaded events
+    let handle = tokio::spawn(process_events(events, mode_tx.clone()));
+    handles.push(handle);
+    log::info!("Scheduler started automatically");
+
 
     loop {
         if let Some(mut new_events) = ev.recv().await {
+            log::info!("New Event Received");
+
             new_events.0.sort_by(|a, b| a.time.cmp(&b.time));
             if let Err(e) = update_eventfile(&new_events).await {
                 log::error!("Events store fail  | {e:?}");
@@ -160,30 +170,37 @@ fn update_eventfile_sync(events: &Events) -> Result<String, IndraError> {
 async fn process_events(events: Events, mode_tx: ChademoTx) {
     // mut rx_break: Receiver<bool>,
     loop {
-        let mut todays_events = events.clone();
         let id = tokio::task::id().to_string();
-        log::warn!("New process_events thread started | task_id {id} New thread");
-        if let Some(event) = todays_events.0.pop() {
-            let current_time = chrono::Local::now().time();
-            let next_event_time = event.time;
-            if current_time > next_event_time {
-                // skip old
-                log::warn!("Skipping over expired event | task_id={id} action={event:?}");
-            } else if current_time <= next_event_time {
-                let time_until_next_event = next_event_time - current_time;
-                let sleep_duration =
-                    Duration::from_secs(time_until_next_event.num_seconds() as u64);
-                log::info!(
-                    "Waiting until Next Event | task_id={id} wait={sleep_duration:?} time={:?} action={:?}",
-                    event.time,
-                    event.action
-                );
-                sleep(sleep_duration).await;
-                if let Err(e) = mode_tx.send(event.into()).await {
-                    log::error!("Failed to send scheduled mode change | task_id={id} error={e:?}")
-                };
+        log::info!("Starting thread: process_events | task_id {id}");
+
+        let mut todays_events = events.clone();
+
+        let event = loop {
+            if let Some(next_event) = todays_events.0.pop() {
+                log::debug!("Checking event | {:?} at {}", next_event.action, next_event.time);
+
+                let current_time = chrono::Local::now().time();
+                if current_time > next_event.time {
+                    log::debug!("Skipping expired event: | {:?} at {}", next_event.action, next_event.time);
+                }
+                else {
+                    let time_until_next_event = next_event.time - current_time;
+                    let sleep_duration = Duration::from_secs(time_until_next_event.num_seconds() as u64);
+                    log::info!("Waiting until Next Event | wait={sleep_duration:?} - {:?} at {:?}",next_event.action,next_event.time);
+                    sleep(sleep_duration).await;
+                    log::info!("Changing Mode | time={:?} action={:?}",next_event.time,next_event.action);
+                    if let Err(e) = mode_tx.send(next_event.into()).await {
+                        log::error!("Failed to send scheduled mode change | task_id={id} error={e:?}")
+                    };
+                } 
+            } 
+            else {
+                log::debug!("No future events left today");
+                break;        // ← This is the important line
             }
-        }
+            log::info!("SCHEDULER: check next event");
+
+        };
 
         // If all events have been processed, reload events for the next day
         // and recursively call process_events
@@ -197,11 +214,7 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
             .to_std()
             .unwrap();
 
-        log::info!(
-            "Waiting for midnight for next event reload ({:?})",
-            sleep_duration
-        );
-
+        log::debug!("Waiting for midnight for next event reload ({:?})", sleep_duration);
         sleep(sleep_duration).await;
     }
 }

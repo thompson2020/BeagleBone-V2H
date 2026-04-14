@@ -71,7 +71,7 @@ pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
 
         // 1 sec Pre stats
         if counter > 10 {
-            log::info!("PRE status | {}", pre);     // ← Now uses your standard format
+            log::debug!("PRE status | {}", pre);     // ← Now uses your standard format
             counter = 0;
         }
         if instant.elapsed().as_millis().gt(&99) {

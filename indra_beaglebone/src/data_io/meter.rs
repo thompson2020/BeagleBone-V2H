@@ -13,6 +13,7 @@ use tokio::{
     time::{sleep, Duration},
 };
 // MQTT meter additions
+use serde_json::Value;
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
 lazy_static::lazy_static! {
@@ -32,13 +33,13 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
     // MQTT meter additions - Check which meter source to use
     match config.source.as_str() {
         "mqtt" => {
-            log::info!("Using MQTT meter source");
+            log::info!("Using MQTT meter source: | MQTT");
             // meter subscribe is now handled in mqtt.rs
             tokio::spawn(start_meter_staleness_checker(config));
             return Ok(());
         }
         "modbus" | _ => {
-            log::info!("Using Modbus meter source (default)");
+            log::info!("Using (default) meter source: | Modbus");
             // Existing Modbus code continues below...
         }
     }
@@ -116,13 +117,22 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
 pub async fn update_from_mqtt(payload: String) {
     let payload_trim = payload.trim();
 
-    if let Ok(val) = payload_trim.parse::<f32>() {
-		*METER.write().await = Some(val);
+    if let Ok(json) = serde_json::from_str::<Value>(payload_trim) {
+        //extract power from "status = { "power": 1005, "powerl1": 218, "powerl2": 350, "powerl3": 437, "timestamp": 1776202878"
+        let val = match json.get("power").and_then(|v| v.as_f64()) {
+            Some(v) => v as f32,
+            None => {
+                log::warn!("meter: invalid JSON from MQTT: {}", payload_trim);
+                return;
+            }
+        };
+    
+        *METER.write().await = Some(val);
         CHADEMO_DATA.write().await.from_meter(val);
         *LAST_METER_UPDATE.lock().await = Instant::now();   
-        log::info!("MQTT meter: updated value | {:.2} W", val);
+        log::debug!("meter: updated value from MQTT | {:.2} W", val);
     } else {
-        log::warn!("MQTT meter: failed to parse meter value from MQTT:  | {}", payload_trim);
+        log::warn!("meter: failed to parse meter value from MQTT:  | {}", payload_trim);
     }
 }
 

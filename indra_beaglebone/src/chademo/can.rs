@@ -22,7 +22,7 @@ pub async fn recv_send(
             .map_err(|_| IndraError::CanBusRxTimeout(1))?
         {
             if debug {
-                log::info!("<< {:02x}: {:02x?}", frame.id(), frame.data());
+                log::debug!("<< {:02x}: {:02x?}", frame.id(), frame.data());
             }
             match frame.id() {
                 0x100 => chademo.x100 = X100::from(&frame),
@@ -40,7 +40,7 @@ pub async fn recv_send(
     sleep(Duration::from_millis(10)).await;
     for frame in chademo.tx_frames() {
         if debug {
-            log::info!(">> {:02x}: {:02x?}", frame.id(), frame.data());
+            log::debug!(">> {:02x}: {:02x?}", frame.id(), frame.data());
         }
         can.write_frame(frame)
             .map_err(|_| IndraError::CanTx(1))?

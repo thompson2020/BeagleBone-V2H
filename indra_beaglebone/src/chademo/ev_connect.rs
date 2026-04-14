@@ -103,7 +103,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         chademo.x109.status = X109Status::from(0x20);
         assert!(!chademo.x109.status.status_station);
         assert!(!chademo.x109.status.status_vehicle_connector_lock);
-        log::info!("Raise D1");
+        log::debug!("Raise D1");
         log_error!("Setting D1 high", chademo.pins().d1.set_value(1));
 
         log::info!("Check can frames & Wait for K line");
@@ -197,9 +197,9 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
         if contactors {
             log::info!("Contactors opening");
             if chademo.pins().c1.set_value(0).is_ok() {
-                print!("\x07"); // Bell Sound
+                //print!("\x07"); // Bell Sound
                 if chademo.pins().c2.set_value(0).is_ok() {
-                    print!("\x07"); // Bell Sound
+                    //print!("\x07"); // Bell Sound
                     log::warn!("                                       !!!!CONTACTORS OPEN!!!!");
 
                     contactors = false;
@@ -265,7 +265,7 @@ async fn charge_mode(
             let x102status: u8 = chademo.x102.status.into();
             let x109status: u8 = chademo.x109.status.into();
 
-            log::info!(
+            log::debug!(
                 "102s:{:02x}, 109s:{:02x}, Soc:{}% Req:{}A",
                 x102status,
                 x109status,
@@ -423,11 +423,11 @@ async fn k_line(can: &mut CANSocket, chademo: &mut Chademo) -> Result<(), IndraE
 
         // log::info!("{}", chademo.x102.status);
         if chademo.k_line_check()? {
-            log::info!("K && 102.5.0 ok");
+            log::debug!("K && 102.5.0 ok");
             let x102status: u8 = chademo.x102.status.into();
             let x109status: u8 = chademo.x109.status.into();
 
-            log::info!(
+            log::debug!(
                 "102s:{:02x}, 109s:{:02x}, Soc:{}%",
                 x102status,
                 x109status,
@@ -559,7 +559,7 @@ fn limit_setpoint_amps(setpoint_amps: f32, chademo: &Chademo) -> f32 {
 
 // #[inline]
 async fn update_chademo_mutex(chademo: &Chademo) {
-    log::warn!("Accessing CHADEMO_DATA as write");
+    log::info!("Accessing CHADEMO_DATA as write");
     if let Ok(mut w) = CHADEMO_DATA.clone().try_write() {
         w.from_chademo(&chademo);
     } else {
