@@ -108,8 +108,9 @@ fn process_ws_message(
     // {"cmd": "GetJson"} - original comment - can't find this in the codebase, maybe was changed to GetData? --- IGNORE ---
     // {"cmd":{"GetRecords": {parameters...}}}
     match serde_json::from_str::<Instruction>(&cmd) {
-        Ok(d) => match d.cmd {
+    Ok(d) => match d.cmd {
             Cmd::SetMode(mode) => {
+                log::debug!("SetMode - Deserialized SetMode: {:?}", mode);   
                 let mode_tx_blocking = mode_tx.clone();
                 tokio::task::spawn_blocking(move || {
                     log_error!(
@@ -119,7 +120,7 @@ fn process_ws_message(
                 });
                 let response = Response::Mode(mode);
                 log::info!("SetMode Response to Client | {:?}", response);
-                log::debug!("SetMode - variable 'cmd'| {:?}", cmd );
+                log::debug!("SetMode - variable 'cmd' | {:?}", cmd );
                 log::debug!("SetMode - d.cmd matched as Cmd::SetMode");
                 log::debug!("SetMode - variable 'mode' | (deserialized OperationMode): {:?}", mode);
                 log::debug!("SetMode - variable 'mode_tx' (original sender) | {:?}", mode_tx);   // may show channel info

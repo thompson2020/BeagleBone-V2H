@@ -9,6 +9,10 @@ use chrono::{Local, NaiveTime};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::{fs, select, time::sleep};
+//use crate::global_state::ChargeParameters;
+//use crate::global_state::{ChargeParameters, OperationMode};
+
+
 
 const EVENT_FILE: &str = "events.json";
 
@@ -25,20 +29,32 @@ pub enum Action {
 pub struct Event {
     time: NaiveTime,
     action: Action,
+    #[serde(default)]
+    params: Option<ChargeParameters>,   
+
     // You can add other fields here as needed
 }
 impl Into<OperationMode> for Event {
     fn into(self) -> OperationMode {
         use OperationMode::*;
         match self.action {
-            Action::Charge => Charge(ChargeParameters::default()),
-            Action::Discharge => Charge(ChargeParameters::default()),
+            //Action::Charge => Charge(ChargeParameters::default()),
+            Action::Charge => {
+                Charge(self.params.unwrap_or_default())   // ← Use params if present, else default
+            }
+            //Action::Discharge => Charge(ChargeParameters::default()),
+            Action::Discharge => {
+                Charge(self.params.unwrap_or_default())   // ← Use params if present, else default
+            }
             Action::Sleep => Idle,
             Action::V2h => V2h,
             Action::Eco => Charge(ChargeParameters::default().set_eco(true)),
         }
     }
 }
+
+
+
 impl Event {
     pub fn new(hh: u32, mm: u32, ss: u32) -> Self {
         let secs = hh * 3600 + mm * 60 + ss;
@@ -46,6 +62,7 @@ impl Event {
         Self {
             time: time,
             action: Action::Sleep,
+            params: None,   
         }
     }
 }
@@ -174,8 +191,10 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
         log::info!("Starting thread: process_events | task_id {id}");
 
         let mut todays_events = events.clone();
+        log::debug!("Scheduler processing {} events for today", todays_events.0.len());
 
-        let event = loop {
+
+        loop {
             if let Some(next_event) = todays_events.0.pop() {
                 log::debug!("Checking event | {:?} at {}", next_event.action, next_event.time);
 
@@ -188,10 +207,15 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
                     let sleep_duration = Duration::from_secs(time_until_next_event.num_seconds() as u64);
                     log::info!("Waiting until Next Event | wait={sleep_duration:?} - {:?} at {:?}",next_event.action,next_event.time);
                     sleep(sleep_duration).await;
+                    
                     log::info!("Changing Mode | time={:?} action={:?}",next_event.time,next_event.action);
-                    if let Err(e) = mode_tx.send(next_event.into()).await {
-                        log::error!("Failed to send scheduled mode change | task_id={id} error={e:?}")
-                    };
+
+                    //if let Err(e) = mode_tx.send(next_event.into()).await {
+                    let mode: OperationMode = next_event.into();
+                    log::info!("Changing Mode: mode= | {:?}",mode);
+                    if let Err(e) = mode_tx.send(mode).await {
+                        log::error!("Failed to send scheduled mode change | task_id={id} error={e:?}");
+                    }
                 } 
             } 
             else {

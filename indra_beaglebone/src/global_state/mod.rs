@@ -25,7 +25,7 @@ mod test {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Copy)]
 pub struct ChargeParameters {
     amps: Option<u8>,
     eco: Option<bool>,

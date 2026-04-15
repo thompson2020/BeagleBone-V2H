@@ -61,6 +61,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         {
             if let Some(state) = mode_rx.clone().lock().await.recv().await {
                 chademo.set_state(state);
+                log::info!("EV received new mode: {:?}", state);
                 update_panel_leds(&led_tx, &chademo).await;
                 update_chademo_mutex(&chademo).await;
                 if !(state.is_v2h() || state.is_charge()) {
@@ -280,6 +281,7 @@ async fn charge_mode(
             if let Ok(op) = mode_rx.try_recv() {
                 update_panel_leds(&led_tx, &chademo).await;
                 log::info!("New CHAdeMO mode received | {op:?}");
+
                 chademo.set_state(op);
                 update_chademo_mutex(chademo).await;
             }
