@@ -15,6 +15,9 @@ lazy_static::lazy_static! {
     };
 }
 
+//
+
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct MqttConfig {
     pub enabled: bool,
@@ -26,15 +29,21 @@ pub struct MqttConfig {
     pub interval: u32,
     pub topic: String,
     pub sub: String,
+
+    pub mqtt_meter: bool,
+    pub mqtt_meter_total_power_topic: String,
+    pub mqtt_meter_total_power_field: String,
+    pub mqtt_meter_phase_power_topic: String,
+    pub mqtt_meter_phase_power_field: String,
 }
+
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MeterConfig {
+    pub modbus_meter: bool,
     pub address: String,
-	// MQTT meter additions (seperate to mqtt status)
-	pub source: String,                    		// "modbus" or "mqtt"
-    pub mqtt_topic_power: String,
-    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout
+	
+    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout for mqtt meter readings, added to config.toml
 }
 
 #[derive(Debug, Deserialize, Clone)]

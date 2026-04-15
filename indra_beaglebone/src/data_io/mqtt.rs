@@ -57,7 +57,7 @@ impl MqttChademo {
 }
 
 // MQTT Meter - read the mqttConfig as well as the meter config so we can subscribe and get meter readings from mqtt if necessary
-pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Result<(), IndraError> {
+pub async fn mqtt_task(mqtt_config: MqttConfig) -> Result<(), IndraError> {
     use rumqttc::{AsyncClient, MqttOptions, QoS};
 
     log::info!("Starting thread: mqtt_task   | {}", tokio::task::id());
@@ -80,36 +80,41 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Re
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 2);
     // Clone configs for the spawned task so we can still use them later in this function
     let mqtt_config_clone = mqtt_config.clone();
-    let meter_config_clone = meter_config.clone();
+
 	
 	tokio::spawn(async move {
         loop {
             if let Ok(mqtt_event) = eventloop.poll().await {
-                if let ControlFlow::Break(_) = handle_mqtt_event(mqtt_event, &mqtt_config_clone, &meter_config_clone).await {
+                if let ControlFlow::Break(_) = handle_mqtt_event(mqtt_event, &mqtt_config_clone).await {
                     continue;
                 }
             };
         }
     });
 
+    //Subscribe to command topic for web GUI commands
+    log::debug!("MQTT meter: subscribing to command topic from config:  | {}", mqtt_config.sub);
     client
         .subscribe(&mqtt_config.sub, QoS::AtLeastOnce)
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
     
-	//MQTT meter Subscribe to meter topic only if source is set to "mqtt" in config.toml
-    if meter_config.source == "mqtt" {
-        let meter_topic = meter_config.mqtt_topic_power.clone();   // use value from config.toml
-        log::debug!("MQTT meter: subscribing to topic from config:  | {}", meter_topic);
-
-        client
-            .subscribe(&meter_topic, QoS::AtMostOnce)
+	//MQTT meter Subscribe to meter topic only if mqtt_meter = enabled config.toml
+    if mqtt_config.mqtt_meter  {
+        log::debug!("MQTT meter: subscribing to total power topic from config:  | {}", mqtt_config.mqtt_meter_total_power_topic);
+        client.subscribe(&mqtt_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
             .await
             .map_err(|e| IndraError::MqttSub(e))?;
 
-        log::debug!("MQTT meter: successfully subscribed to:  | {}", meter_topic);
+    // Subscribe to phase power topic (only if it's different from total power topic)
+    if mqtt_config.mqtt_meter_phase_power_topic != mqtt_config.mqtt_meter_total_power_topic {
+        log::debug!("MQTT meter: subscribing to phase power topic: {}", mqtt_config.mqtt_meter_phase_power_topic);
+        client.subscribe(&mqtt_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
+            .await
+            .map_err(|e| IndraError::MqttSub(e))?;
+        }
     } else {
-        log::debug!("MQTT meter: source is not 'mqtt', skipping meter subscription");
+        log::debug!("MQTT meter: mqtt_meter = false, skipping meter subscription");
     }
 
 
@@ -143,38 +148,45 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, meter_config: MeterConfig) -> Re
     }
 }
 
-async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig, meter_config: &MeterConfig) -> ControlFlow<()> {
+async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig) -> ControlFlow<()> {
     use rumqttc::Event::*;
 
     match mqtt_event {
         Incoming(mqtt_in) => {
             if let rumqttc::Packet::Publish(msg) = mqtt_in {
-                if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
-                    log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'", 
-                               msg.topic, payload);
+                //if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
+                let payload_str = String::from_utf8_lossy(&msg.payload);
+                let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
+                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, clean_payload);
 
-                    // Check if this is a command from the web GUI
-                    if msg.topic == mqtt_config.sub {
-                        log::warn!("MQTT : command received via MQTT on - not implemented yet ' | {}'", msg.topic);
-						// use rumqttc::Packet::*;
-						// log::debug!("Incoming {:?}", mqtt_in);
-						// if let Publish(msg) = mqtt_in {
-						//     *CARDATA.lock().await = match serde_json::from_slice::<Data>(&msg.payload) {
-						//         Ok(json) => json.inner,
-						//         Err(e) => {
-						//             log::error!("{e:?}");
-						//             return ControlFlow::Break(());
-						//         }
-						//     };
-						// }
-                    }
-
-                    // If it's our meter topic, pass raw payload to meter.rs
-                    if msg.topic == meter_config.mqtt_topic_power {
-                        log::debug!("MQTT message from meter topic - Processing");
-                        crate::meter::update_from_mqtt(payload).await;
-                    }
+                // Check if this is a command from the web GUI
+                if msg.topic == mqtt_config.sub {
+                    log::warn!("MQTT : command received via MQTT on - not implemented yet ' | {}'", msg.topic);
+                    // use rumqttc::Packet::*;
+                    // log::debug!("Incoming {:?}", mqtt_in);
+                    // if let Publish(msg) = mqtt_in {
+                    //     *CARDATA.lock().await = match serde_json::from_slice::<Data>(&msg.payload) {
+                    //         Ok(json) => json.inner,
+                    //         Err(e) => {
+                    //             log::error!("{e:?}");
+                    //             return ControlFlow::Break(());
+                    //         }
+                    //     };
+                    // }
                 }
+
+                // If it's our total meter topic, pass raw payload to meter.rs
+                if msg.topic == mqtt_config.mqtt_meter_total_power_topic {
+                    log::debug!("MQTT message from meter total topic - Processing");
+                    crate::meter::update_from_mqtt(clean_payload.to_string(),mqtt_config.mqtt_meter_total_power_field.clone(),true ).await;
+                }
+
+                // If it's our phase meter topic, pass raw payload to meter.rs
+                if msg.topic == mqtt_config.mqtt_meter_phase_power_topic {
+                    log::debug!("MQTT message from meter phase topic - Processing");
+                    crate::meter::update_from_mqtt(clean_payload.to_string(),mqtt_config.mqtt_meter_phase_power_field.clone(),false ).await;
+                }
+
             }
         }
 

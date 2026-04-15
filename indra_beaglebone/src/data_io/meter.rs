@@ -31,17 +31,15 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
 
 
     // MQTT meter additions - Check which meter source to use
-    match config.source.as_str() {
-        "mqtt" => {
-            log::info!("Using MQTT meter source: | MQTT");
-            // meter subscribe is now handled in mqtt.rs
-            tokio::spawn(start_meter_staleness_checker(config));
-            return Ok(());
-        }
-        "modbus" | _ => {
-            log::info!("Using (default) meter source: | Modbus");
+    if config.modbus_meter {
+       log::info!("Modbus meter enabled | Modbus");
             // Existing Modbus code continues below...
-        }
+    }
+    else {
+        log::info!("Modbus meter not enabled - Adding Staleness check for mqtt meter");
+        // meter subscribe is now handled in mqtt.rs
+        tokio::spawn(start_meter_staleness_checker(config));
+        return Ok(());
     }
 
 
@@ -114,27 +112,55 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
 }
 
 // MQTT additions - Called from mqtt.rs when a new meter value arrives via MQTT
-pub async fn update_from_mqtt(payload: String) {
+pub async fn update_from_mqtt(payload: String, mqtt_field: String, is_total_power: bool) {
     let payload_trim = payload.trim();
 
-    if let Ok(json) = serde_json::from_str::<Value>(payload_trim) {
-        //extract power from "status = { "power": 1005, "powerl1": 218, "powerl2": 350, "powerl3": 437, "timestamp": 1776202878"
-        let val = match json.get("power").and_then(|v| v.as_f64()) {
-            Some(v) => v as f32,
+    // Case 1: Plain number
+    let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
+        log::debug!("meter: received plain number: {:.2} W", val);
+        val
+    } 
+    // Case 2: JSON object
+    else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
+        match json.get(&mqtt_field).and_then(|v| v.as_f64()) {
+            Some(v) => {
+                let val = v as f32;
+                log::debug!("meter: received JSON value from field '{}' : {:.2} W", mqtt_field, val);
+                val
+            }
             None => {
-                log::warn!("meter: invalid JSON from MQTT: {}", payload_trim);
+                log::warn!("meter: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
                 return;
             }
-        };
-    
-        *METER.write().await = Some(val);
-        CHADEMO_DATA.write().await.from_meter(val);
-        *LAST_METER_UPDATE.lock().await = Instant::now();   
-        log::debug!("meter: updated value from MQTT | {:.2} W", val);
+        }
+    } 
+    else {
+        log::warn!("meter: failed to parse as number or JSON | payload: {}", payload_trim);
+        return;
+    };
+
+    // Now update the correct value
+    if is_total_power {
+        update_total_power(val).await;
     } else {
-        log::warn!("meter: failed to parse meter value from MQTT:  | {}", payload_trim);
+        update_phase_power(val).await;
     }
 }
+
+// Small helper to avoid duplicating the update code
+async fn update_total_power(val: f32) {
+    *METER.write().await = Some(val);
+    CHADEMO_DATA.write().await.from_meter(val);
+    *LAST_METER_UPDATE.lock().await = Instant::now();
+    log::debug!("meter total power: updated value from MQTT | {:.2} W", val);
+}
+
+async fn update_phase_power(val: f32) {
+    log::debug!("meter phase power: updated value from MQTT | {:.2} W", val);
+}
+  
+
+
 
 // Background task to check if meter data is stale
 pub async fn start_meter_staleness_checker(meter_config: MeterConfig) {
