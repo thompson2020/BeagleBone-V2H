@@ -114,6 +114,7 @@ pub mod statics {
 
     lazy_static::lazy_static! {
         // pub static ref STATE: Arc<Mutex<State>> = Arc::new(Mutex::new(State(ChargerState::Idle)));
+        //CHADEMO - not used - defined here to stops lots of warnings about unused functions - probably a better way to do this!
         pub static ref CHADEMO: Arc<Mutex<Chademo>> = Arc::new(Mutex::new(Chademo::new()));
         pub static ref OPERATIONAL_MODE: Arc<Mutex<OperationMode>> =
             Arc::new(Mutex::new(OperationMode::default()));
