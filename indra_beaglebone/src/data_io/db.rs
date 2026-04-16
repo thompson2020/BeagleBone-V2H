@@ -36,8 +36,14 @@ pub async fn init(update_millisecs: u64) -> Result<(), IndraError> {
 
         if let Some(db) = POOL.get() {
             match db.add_record(&(row).into()).await {
-                Ok(sql) => log::debug!("db row added | #{} ", sql.last_insert_rowid()),
-                Err(e) => log::error!("db | {e:?}"),
+                Ok((row_id, data)) => {
+                    if let Ok(json) = serde_json::to_string(&data) {
+                        log::debug!("db row added | #{} | {}", row_id, json);  // log in JSON to match other logs 
+                    } else {
+                        log::debug!("db row added | #{}", row_id);
+                    }
+                }
+                Err(e) => log::error!("db insert failed: {e:?}"),
             };
         };
         let remaining = update_period - instant.elapsed();
@@ -141,10 +147,9 @@ impl Database {
     pub async fn add_record(
         &self,
         record: &ChademoDbRow,
-    ) -> Result<SqliteQueryResult, Box<dyn Error>> {
+    ) -> Result<(i64, ChademoDbRow), Box<dyn Error>> {
         let mut conn = self.pool.acquire().await?;
-        Ok(sqlx::query("INSERT INTO sensor_readings (timestamp, dc_kw, soc, volts, temp, amps, requested_amps, fan, meter_kw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(Utc::now())
+        let result = sqlx::query("INSERT INTO sensor_readings (timestamp, dc_kw, soc, volts, temp, amps, requested_amps, fan, meter_kw) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")            .bind(Utc::now())
             .bind(record.dc_kw)
             .bind(record.soc)
             .bind(record.volts)
@@ -154,8 +159,11 @@ impl Database {
             .bind(record.fan)
             .bind(record.meter_kw)
             .execute(&mut *conn)
-            .await
-            ?)
+            .await?;
+
+        let row_id = result.last_insert_rowid();
+
+        Ok((row_id, record.clone()))
     }
     pub async fn get_all_records(&self) -> Result<Vec<ChademoDbRow>, Box<dyn Error>> {
         Ok(
