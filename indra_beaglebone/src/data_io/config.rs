@@ -33,8 +33,19 @@ pub struct MqttConfig {
     pub mqtt_meter: bool,
     pub mqtt_meter_total_power_topic: String,
     pub mqtt_meter_total_power_field: String,
+    pub mqtt_meter_total_power_scale: f32,
+
     pub mqtt_meter_phase_power_topic: String,
     pub mqtt_meter_phase_power_field: String,
+    pub mqtt_meter_phase_power_scale: f32,
+    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout for mqtt meter readings, added to config.toml
+
+    pub mqtt_smart_charge_topic: String,
+    pub mqtt_smart_charge_field: String,
+
+    pub mqtt_ev_drain_protection_topic: String,
+    pub mqtt_ev_drain_protection_field: String,
+
 }
 
 
@@ -43,7 +54,6 @@ pub struct MeterConfig {
     pub modbus_meter: bool,
     pub address: String,
 	
-    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout for mqtt meter readings, added to config.toml
 }
 
 #[derive(Debug, Deserialize, Clone)]

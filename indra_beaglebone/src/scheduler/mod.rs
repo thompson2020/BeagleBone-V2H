@@ -37,18 +37,25 @@ pub struct Event {
 impl Into<OperationMode> for Event {
     fn into(self) -> OperationMode {
         use OperationMode::*;
+
         match self.action {
-            //Action::Charge => Charge(ChargeParameters::default()),
             Action::Charge => {
-                Charge(self.params.unwrap_or_default())   // ← Use params if present, else default
+                Charge(self.params.unwrap_or_default())
             }
-            //Action::Discharge => Charge(ChargeParameters::default()),
+
             Action::Discharge => {
-                Charge(self.params.unwrap_or_default())   // ← Use params if present, else default
+                Charge(self.params.unwrap_or_default())
             }
+
             Action::Sleep => Idle,
+
             Action::V2h => V2h,
-            Action::Eco => Charge(ChargeParameters::default().set_eco(true)),
+
+            Action::Eco => {
+                let mut cp = ChargeParameters::default();
+                cp.set_eco(true);
+                Charge(cp)
+            }
         }
     }
 }
@@ -196,16 +203,16 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
 
         loop {
             if let Some(next_event) = todays_events.0.pop() {
-                log::debug!("Checking event | {:?} at {}", next_event.action, next_event.time);
+                log::debug!("Checking event | {} action= {:?}", next_event.time, next_event.action);
 
                 let current_time = chrono::Local::now().time();
                 if current_time > next_event.time {
-                    log::debug!("Skipping expired event: | {:?} at {}", next_event.action, next_event.time);
+                    log::debug!("Skipping expired event: | {} action= {:?}", next_event.time, next_event.action);
                 }
                 else {
                     let time_until_next_event = next_event.time - current_time;
                     let sleep_duration = Duration::from_secs(time_until_next_event.num_seconds() as u64);
-                    log::info!("Waiting until Next Event | wait={sleep_duration:?} - {:?} at {:?}",next_event.action,next_event.time);
+                    log::info!("Waiting until Next Event | wait={sleep_duration:?} - {} action = {:?}",next_event.time, next_event.action);
                     sleep(sleep_duration).await;
                     
                     log::info!("Changing Mode | time={:?} action={:?}",next_event.time,next_event.action);

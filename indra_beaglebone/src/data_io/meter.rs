@@ -20,12 +20,6 @@ lazy_static::lazy_static! {
     pub static ref METER: Arc<RwLock<Option<f32>>> = Arc::new(RwLock::new(Some(0f32)));
 }
 
-// MQTT meter additions
-lazy_static::lazy_static! {
-    pub static ref LAST_METER_UPDATE: Arc<Mutex<Instant>> = 
-        Arc::new(Mutex::new(Instant::now()));
-}
-
 pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
     log::info!("Starting thread: meter   | {}", tokio::task::id());
 
@@ -35,13 +29,14 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
        log::info!("Modbus meter enabled | Modbus");
             // Existing Modbus code continues below...
     }
+    /*
     else {
         log::info!("Modbus meter not enabled - Adding Staleness check for mqtt meter");
         // meter subscribe is now handled in mqtt.rs
         tokio::spawn(start_meter_staleness_checker(config));
         return Ok(());
     }
-
+*/
 
     // let config = &APP_CONFIG.clone();s
     let address = config.address.clone();
@@ -95,13 +90,14 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
                     break 'inner;
                 }
             };
+
             log::info!("Meter value  | {} ", val);
+            *METER.write().await = Some(val);
             {
-                *METER.clone().write().await = Some(val);
+                let mut data = CHADEMO_DATA.write().await;
+                data.from_meter(val,false);
             }
-            {
-                CHADEMO_DATA.clone().write().await.from_meter(val);
-            }
+            
             if instant.elapsed() < Duration::from_millis(500) {
                 sleep(Duration::from_millis(500) - instant.elapsed()).await
             }
@@ -111,72 +107,65 @@ pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
     }
 }
 
-// MQTT additions - Called from mqtt.rs when a new meter value arrives via MQTT
-pub async fn update_from_mqtt(payload: String, mqtt_field: String, is_total_power: bool) {
-    let payload_trim = payload.trim();
 
-    // Case 1: Plain number
-    let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
-        log::debug!("meter: received plain number: {:.2} W", val);
-        val
-    } 
-    // Case 2: JSON object
-    else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
-        match json.get(&mqtt_field).and_then(|v| v.as_f64()) {
-            Some(v) => {
-                let val = v as f32;
-                log::debug!("meter: received JSON value from field '{}' : {:.2} W", mqtt_field, val);
-                val
-            }
-            None => {
-                log::warn!("meter: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
-                return;
-            }
-        }
-    } 
-    else {
-        log::warn!("meter: failed to parse as number or JSON | payload: {}", payload_trim);
-        return;
-    };
 
-    // Now update the correct value
-    if is_total_power {
-        update_total_power(val).await;
-    } else {
-        update_phase_power(val).await;
+
+
+// MQTT handled in mqtt.rs - only meter updates are here for METER access
+pub async fn update_total_power(val: f32) {
+    {
+        let mut meter = METER.write().await;
+        *meter = Some(val);
     }
+  {
+        let mut data = CHADEMO_DATA.write().await;
+        data.from_meter(val, false);
+    }
+    log::debug!("MQTT updated: total power | {:.2} W", val);
 }
-
-// Small helper to avoid duplicating the update code
-async fn update_total_power(val: f32) {
-    *METER.write().await = Some(val);
-    CHADEMO_DATA.write().await.from_meter(val);
-    *LAST_METER_UPDATE.lock().await = Instant::now();
-    log::debug!("meter total power: updated value from MQTT | {:.2} W", val);
+pub async fn mark_total_power_as_stale() {
+    *METER.write().await = None;
+    {
+        let mut data = CHADEMO_DATA.write().await;
+        data.from_meter(0.0, true);
+    }    
+    log::error!("MQTT updated: total power is STALE → treating as offline");
 }
-
-async fn update_phase_power(val: f32) {
-    log::debug!("meter phase power: updated value from MQTT | {:.2} W", val);
+pub async fn update_phase_power(val: f32) {
+    {
+        let mut data = CHADEMO_DATA.write().await;
+        data.from_meter_phase(Some(val), false);
+    }
+    log::debug!("MQTT updated: phase power | {:.2} W", val);
 }
-  
+pub async fn mark_phase_power_as_stale() {
+    {
+        let mut data = CHADEMO_DATA.write().await;
+        data.from_meter_phase(None, true);
+    }
+    log::error!("MQTT updated: phase power to stale (treating as offline) | Stale ");
+}
 
 
 
 // Background task to check if meter data is stale
+/*
 pub async fn start_meter_staleness_checker(meter_config: MeterConfig) {
     loop {
         sleep(Duration::from_secs(10)).await;
 
-        let age = LAST_METER_UPDATE.lock().await.elapsed().as_secs();
+        //let age = LAST_METER_UPDATE.lock().await.elapsed().as_secs();
         log::debug!("MQTT meter: data age  | {} seconds", age);
         if age > meter_config.mqtt_meter_timeout_seconds {
+            
+        
             log::error!("MQTT meter: data is stale - treating as offline  | {} seconds", age);
             *METER.write().await = None;
             CHADEMO_DATA.write().await.from_meter(0.0);
         }
     }
 }
-
+*/
 
 
 

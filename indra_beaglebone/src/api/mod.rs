@@ -52,45 +52,53 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
 
     use tokio_tungstenite::tungstenite::Error;
 
-    let process_incoming_ws = |msg: Result<Message, Error>| -> Result<Message, Error> {
-        let cmd = match msg? {
-            Message::Text(cmd) => {
-                log::debug!("WebSocket Received: | {:?}", cmd);
-                
-            // Log important "Set" commands at INFO level
-            if cmd.contains("\"SetMode\"") {
-                log::warn!("SetMode command received from client");
-            } else if cmd.contains("\"SetEvents\"") {
-                log::warn!("SetEvents command received from client");
-            }
-                
-                cmd
-            }
-            Message::Binary(cmd) => {
-                log::debug!("WebSocket Received binary data: {:x?}", cmd);
-                let cmd = String::from_utf8_lossy(&cmd).into();
-                cmd
-            }
-            _ => {
-                panic!()
-                // return Err(Error::Utf8);
-            }
-        };
-        process_ws_message(&cmd, &events_tx, &mode_tx)
-    };
-
     let result = read
         .try_filter(|msg| future::ready(msg.is_text() || msg.is_binary()))
-        .map(|s| process_incoming_ws(s))
+        .then(|msg| {
+            let events_tx = events_tx.clone();
+            let mode_tx = mode_tx.clone();
+
+            async move {
+                let cmd = match msg {
+                    Ok(Message::Text(cmd)) => {
+                        log::debug!("WebSocket Received: | {:?}", cmd);
+
+                        if cmd.contains("\"SetMode\"") {
+                            log::warn!("SetMode command received from client ");
+                        } else if cmd.contains("\"SetEvents\"") {
+                            log::warn!("SetEvents command received from client");
+                        }
+
+                        cmd
+                    }
+                    Ok(Message::Binary(cmd)) => {
+                        log::debug!("WebSocket Received binary data: {:x?}", cmd);
+                        String::from_utf8_lossy(&cmd).to_string()
+                    }
+                    Err(e) => {
+                        return Ok(Message::Text(format!(
+                            "{{\"ack\":\"err\",\"msg\":\"{e}\"}}"
+                        )));
+                    }
+                    _ => {
+                        return Ok(Message::Text(BAD_ACK.to_string()));
+                    }
+                };
+
+                process_ws_message(&cmd, &events_tx, &mode_tx).await
+            }
+        })
         .forward(write)
         .await;
+
     if let Err(e) = result {
         log::error!("WebSocket filter error | {}", e);
     }
+
 }
 
-/// Cannot be async
-fn process_ws_message(
+
+async fn process_ws_message(
     cmd: &str,
     events_tx: &EventsTx,
     mode_tx: &ChademoTx,
@@ -120,30 +128,32 @@ fn process_ws_message(
                 });
                 let response = Response::Mode(mode);
                 log::info!("SetMode Response to Client | {:?}", response);
-                log::debug!("SetMode - variable 'cmd' | {:?}", cmd );
-                log::debug!("SetMode - d.cmd matched as Cmd::SetMode");
-                log::debug!("SetMode - variable 'mode' | (deserialized OperationMode): {:?}", mode);
-                log::debug!("SetMode - variable 'mode_tx' (original sender) | {:?}", mode_tx);   // may show channel info
+                //log::debug!("SetMode - variable 'cmd' | {:?}", cmd );
+                //log::debug!("SetMode - d.cmd matched as Cmd::SetMode");
+                //log::debug!("SetMode - variable 'mode' | (deserialized OperationMode): {:?}", mode);
+                //log::debug!("SetMode - variable 'mode_tx' (original sender) | {:?}", mode_tx);   // may show channel info
+                Ok(Message::Text(serde_json::to_string(&response).unwrap()))
+            }
+            Cmd::GetData => {
+                let snapshot = {
+                    let guard = CHADEMO_DATA.read().await;
+                    *guard
+                };
+
+                let response = Response::Data(snapshot);
+                log::debug!("GetData response to client | {:?}", response);  
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
             Cmd::GetMode => {
-                let mode = match CHADEMO.clone().try_lock() {
-                    Ok(mode) => *mode.state(),
-                    Err(_) => return Err(tungstenite::Error::Utf8),
+                let mode = {
+                    let guard = CHADEMO.blocking_lock(); 
+                    *guard.state()
                 };
 
                 let response = Response::Mode(mode);
-                log::info!("GetMode response to client | {:?}", response);
+
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
-            Cmd::GetData => match CHADEMO_DATA.clone().try_read() {
-                Ok(d) => {
-                    let response = Response::Data(*d);
-                    log::debug!("GetData response to client | {:?}", response);  
-                    Ok(Message::Text(serde_json::to_string(&response).unwrap()))
-                }
-                Err(_) => Ok(Message::Text(BAD_ACK.to_string())),
-            },
             Cmd::SetEvents(events) => {
                 log::info!("Received SetEvents from client | {:?}", events);
                 let events_tx_c = events_tx.clone();
@@ -177,12 +187,12 @@ fn process_ws_message(
                         Ok(Message::Text(BAD_ACK.to_string()))
                     }
                 };
-                let rt = tokio::runtime::Runtime::new().unwrap();
+                let rt = tokio::runtime::Runtime::new().unwrap();               
                 rt.block_on(async { tokio::spawn(handle).await.unwrap() })
             }
         },
         Err(e) => {
-            log::error!("Could not deserialise Instruction | {cmd} - {e:?}");
+            log::error!("Could not deserialise Instruction | {cmd} - {e:?}");   // Nested Tokio runtime (this is a big one) // Big Locks Do this a different way - maybe have a separate async function for processing the command that can be called from here and can use async/await properly, rather than blocking the thread with block_on?
             Ok(Message::Text(BAD_ACK.to_owned()))
         }
     }

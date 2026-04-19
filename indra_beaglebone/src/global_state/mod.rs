@@ -33,34 +33,52 @@ pub struct ChargeParameters {
 }
 
 impl ChargeParameters {
+    pub fn set_amps(&mut self, limit: u8) {
+        self.amps = Some(limit);
+        
+    }
+
+    pub fn set_eco(&mut self, enabled: bool)  {
+        self.eco = Some(enabled);
+        
+    }
+
+    pub fn set_soc_limit(&mut self, soc_limit: u8)  {
+        self.soc_limit = Some(soc_limit);
+        
+    }
+
+
+
     pub fn get_amps(&self) -> u8 {
         match self.amps {
             Some(amps) => amps,
             None => MAX_AMPS,
         }
     }
-    pub fn set_amps(&mut self, limit: u8) -> Self {
-        self.amps = Some(limit);
-        *self.deref()
-    }
+    //pub fn set_amps(&mut self, limit: u8) -> Self {
+    //    self.amps = Some(limit);
+    //    *self.deref()
+    //}
     pub fn get_eco(&self) -> bool {
         match self.eco {
             Some(b) => b,
             None => false,
         }
     }
-    pub fn set_eco(&mut self, enabled: bool) -> Self {
-        self.eco = Some(enabled);
-        *self.deref()
-    }
+    //pub fn set_eco(&mut self, enabled: bool) -> Self {
+    //    self.eco = Some(enabled);
+    //    *self.deref()
+   // }
     pub fn get_soc_limit(&self) -> Option<u8> {
         self.soc_limit
     }
-    pub fn set_soc_limit(&mut self, soc_limit: u8) -> Self {
-        self.soc_limit = Some(soc_limit);
-        *self.deref()
-    }
+    //pub fn set_soc_limit(&mut self, soc_limit: u8) -> Self {
+    //    self.soc_limit = Some(soc_limit);
+    //    *self.deref()
+   // }
 }
+
 impl Default for ChargeParameters {
     fn default() -> Self {
         Self {
@@ -71,7 +89,7 @@ impl Default for ChargeParameters {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, Copy, PartialEq)]
 pub enum OperationMode {
     /// Bidirectional load matching
     V2h,
@@ -89,17 +107,20 @@ pub enum OperationMode {
 }
 
 impl OperationMode {
-    pub fn eco_charge(&mut self, enabled: bool) {
-        let cp = ChargeParameters::default().set_eco(enabled);
+     pub fn eco_charge(&mut self, enabled: bool) {
+        let mut cp = ChargeParameters::default();
+        cp.set_eco(enabled);
         *self = Self::Charge(cp);
     }
     pub fn limit_soc(&mut self, limit: u8) {
-        let cp = ChargeParameters::default().set_soc_limit(limit);
-        *self = Self::Charge(cp)
+        let mut cp = ChargeParameters::default();
+        cp.set_soc_limit(limit);
+        *self = Self::Charge(cp);
     }
     pub fn limit_amps(&mut self, limit: u8) {
-        let cp = ChargeParameters::default().set_amps(limit);
-        *self = Self::Charge(cp)
+        let mut cp = ChargeParameters::default();
+        cp.set_amps(limit);
+        *self = Self::Charge(cp);
     }
     pub fn is_eco(&self) -> bool {
         match self {

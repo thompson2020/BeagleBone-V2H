@@ -38,7 +38,8 @@ pub async fn init(update_millisecs: u64) -> Result<(), IndraError> {
             match db.add_record(&(row).into()).await {
                 Ok((row_id, data)) => {
                     if let Ok(json) = serde_json::to_string(&data) {
-                        log::debug!("db row added | #{} | {}", row_id, json);  // log in JSON to match other logs 
+                        let pretty_json = json.replace(":", ": ").replace(",", ", ");
+                        log::debug!("db row added | #{} | {}", row_id, pretty_json);  // log in JSON to match other logs (pretty makes sure it wraps correctly)
                     } else {
                         log::debug!("db row added | #{}", row_id);
                     }

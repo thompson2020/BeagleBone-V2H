@@ -22,7 +22,7 @@ mod macros;
 mod pre_charger;
 mod scheduler;
 
-const MAX_SOC: u8 = 90;
+const MAX_SOC: u8 = 95;
 const MIN_SOC: u8 = 31;
 const MAX_AMPS: u8 = 16;
 const METER_BIAS: f32 = 0.0;
@@ -52,6 +52,9 @@ async fn main() -> Result<(), &'static str> {
         .server_addr(([0, 0, 0, 0], 5556))
         .init();
 
+    // Force local timezone for timestamps
+    std::env::set_var("TZ", "Europe/London");
+
     #[cfg(feature = "logging-verbose")]
     simple_logger::init_with_level(log::Level::Trace).expect("Logger init failed");
     #[cfg(not(feature = "logging-verbose"))]
@@ -75,7 +78,7 @@ async fn main() -> Result<(), &'static str> {
     tokio::spawn(scheduler::init(events_rx, mode_tx.clone()));
     tokio::spawn(api::run(events_tx, mode_tx.clone()));
     tokio::spawn(data_io::db::init(10_000));
-    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone()));
+    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone(), mode_tx.clone()));
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let mut ctrl_c =
