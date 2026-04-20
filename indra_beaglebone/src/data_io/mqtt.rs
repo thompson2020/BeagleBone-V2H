@@ -31,6 +31,14 @@ lazy_static! {
         Arc::new(RwLock::new(MqttChademo::default()));
 }
 
+static HANDLE_SMART_CHARGE_CHANGE_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+struct SmartChargeRunningGuard;
+impl Drop for SmartChargeRunningGuard {
+    fn drop(&mut self) {
+        HANDLE_SMART_CHARGE_CHANGE_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 #[derive(Clone, Copy, Serialize, Debug)]
 pub struct MqttChademo {
     pub dc_kw: f32,
@@ -326,7 +334,18 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
     } 
     // Case 2: JSON object
     else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
-        match json.get(&mqtt_field).and_then(|v| v.as_f64()) {
+        let mut current = &json;
+        for key in mqtt_field.split('.') {
+            current = match current.get(key) {
+                Some(v) => v,
+                None => {
+                    log::warn!("MQTT: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
+                    return;
+                }
+            };
+        }
+
+        match current.as_f64() {
             Some(v) => {
                 let val = v as f32;
                 log::debug!("MQTT: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
@@ -424,6 +443,12 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
 // Uses soft start/stop to avoid sudden 0 <-> 6.4kW reversal
 pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
   
+    if HANDLE_SMART_CHARGE_CHANGE_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        log::warn!("Smart Charge: Received but already running - ignoring new trigger");
+        return;
+    }
+    let _guard = SmartChargeRunningGuard;
+
       // Use a static to remember the last known state
     static LAST_SMART_CHARGE: std::sync::atomic::AtomicBool = 
         std::sync::atomic::AtomicBool::new(false);
@@ -435,53 +460,104 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         log::debug!("Smart Charge: Received but value not changed - No Action taken | {}", enabled);
         return;
     }
-    
     // Update the stored state
     LAST_SMART_CHARGE.store(enabled, std::sync::atomic::Ordering::Relaxed);
 
-  
+
     if enabled {
-        // Soft start: 1A for 60 seconds
-        log::info!("Smart Charge activated - soft start at 1A for 60s");
+        // Soft start: 1A for 15 seconds
+        let current_mode = {
+            let guard = CHADEMO_DATA.read().await;
+            guard.state
+        };
+        log::debug!("Smart Charge->false = Checking current mode is V2h: {:?}", current_mode);
+        if !matches!(current_mode, OperationMode::V2h) {
+            log::debug!("Smart Charge->true - IGNORED Action as the current mode not V2h: {:?}", current_mode);
+            return;
+        }
+        log::info!("Smart Charge->true - soft start at 1A for 15s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
-        params.set_soc_limit(90);
+        params.set_soc_limit(85);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
-
-        let _ = mode_tx.send(mode).await;
+        let tx = mode_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tx.send(mode).await {
+                log::error!("MQTT failed to send mode: {:?}", e);
+            }
+        });
         
-        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-
+        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+        let current_mode = {
+            let guard = CHADEMO_DATA.read().await;
+            guard.state
+        };
+        if !current_mode.is_charge() {
+            log::warn!("Smart Charge->true - ABORTED(ramping to 16A) - no longer in Charge mode: {:?}", current_mode);
+            return;
+        }
         // Ramp up to full 16A
-        log::info!("Smart Charge soft start complete - ramping to 16A");
+        log::info!("Smart Charge->true, soft start complete - ramping to 16A");
         let mut params = ChargeParameters::default();
-        params.set_amps(1);
-        params.set_soc_limit(90);
+        params.set_amps(16);
+        params.set_soc_limit(85);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
-
-        let _ = mode_tx.send(mode).await;
+        let tx = mode_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tx.send(mode).await {
+                log::error!("MQTT failed to send mode: {:?}", e);
+            }
+        });
         
         // TODO: Consider smoother ramp (e.g. 1A → 4A → 8A → 16A over time)
 
     } else {
-        // Soft stop: reduce to 1A for 60 seconds before returning to V2H
-  
-        log::info!("Smart Charge ended - soft stop at 1A for 60s");
+        // Soft stop: reduce to 1A for 15 seconds before returning to V2H
+        let current_mode = {
+            let guard = CHADEMO_DATA.read().await;
+            guard.state
+        };
+        log::debug!("Smart Charge->false = Checking current mode is Idle/Charge: {:?}", current_mode);
+        if !matches!(current_mode, OperationMode::Idle | OperationMode::Charge(_)) {
+            log::warn!("Smart Charge->false = IGNORED - not Idle/Charge: {:?}", current_mode);
+            return;
+        }
+        log::info!("Smart Charge->false - soft stop at 1A for 15s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
-        params.set_soc_limit(90);
+        params.set_soc_limit(85);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
+        let tx = mode_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tx.send(mode).await {
+                log::error!("MQTT failed to send mode: {:?}", e);
+            }
+        });
 
-        let _ = mode_tx.send(mode).await;
-        
-        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+        let current_mode = {
+            let guard = CHADEMO_DATA.read().await;
+            guard.state
+        };
+        if !current_mode.is_charge() {
+            log::warn!("Smart Charge->false - ABORTED(returning to V2H) - no longer in Charge mode: {:?}", current_mode);
+            return;
+        }
+        log::info!("Smart Charge->false - soft stop complete - returning to V2H");
+        let mode = OperationMode::V2h;
+        log::debug!("Smart Charge mode created | {:?}", mode);
+        let tx = mode_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tx.send(mode).await {
+                log::error!("MQTT failed to send mode: {:?}", e);
+            }
+        });
+        log::info!("Smart Charge SWITCHED TO V2H");
+        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;  // we dont need to spawn the tx.send as this is async - but bodge to ensure the mode change is sent before task exits 
 
-        log::info!("Smart Charge soft stop complete - returning to V2H");
-        let _ = mode_tx.send(OperationMode::V2h).await;
-    
     }
 }
 
@@ -513,21 +589,7 @@ pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: Cha
 
         let timeout_seconds = mqtt_config.mqtt_meter_timeout_seconds;
 
-        log::debug!("MQTT meter: running staleness check (timeout = {}s)", timeout_seconds);
-
-        // Check total power staleness
-        /*{
-            let data = CHADEMO_DATA.read().await;
-            if let Some(last_update) = data.last_total_power_update {
-                let age = last_update.elapsed().as_secs();
-                if age > timeout_seconds {
-                    log::warn!("MQTT meter: total power data is stale (age = {}s)", age);
-                    crate::meter::mark_total_power_as_stale().await;
-                } else {
-                    log::debug!("MQTT meter: total power data is fresh (age = {}s)", age);
-                }
-            }
-        }*/
+        log::debug!("Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
 
         let snapshot = {
             let data = CHADEMO_DATA.read().await;
@@ -563,8 +625,7 @@ pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: Cha
                     log::debug!("Staleness check: mark_total_power_as_stale()");
                     crate::meter::mark_total_power_as_stale().await;
                 } else {
-                    log::debug!("Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", 
-                                age, timeout_seconds);
+                    log::debug!("Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
                 }
             } else {
                 log::warn!("Staleness check: No last_total_power_update timestamp found (never received data?)");
@@ -579,49 +640,69 @@ pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: Cha
       // Check phase power staleness
         {
             //let data = CHADEMO_DATA.read().await;
+            log::debug!("Staleness check: Starting phase power staleness check");            
             if let Some(last_update) = snapshot.last_phase_power_update {
                 let age = last_update.elapsed().as_secs();
                 if age > timeout_seconds {
-                    log::warn!("MQTT meter: phase power data is stale (age = {}s)", age);
+                    log::warn!("Staleness check: phase power data is stale (age = {}s)", age);
                     crate::meter::mark_phase_power_as_stale().await;
                 } else {
-                    log::debug!("MQTT meter: phase power data is fresh (age = {}s)", age);
+                    log::debug!("Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
                 }   
-            }
+            } else {
+                log::warn!("Staleness check: No last_phase_power_update timestamp found (never received data?)");
+            }   
         }
 
         // Check smart_charge staleness
         {
+            log::debug!("Staleness check: Starting smart_charge staleness check");
             //let data = CHADEMO_DATA.read().await;
             if let Some(last_update) = snapshot.smart_charge_update {
                 let age = last_update.elapsed().as_secs();
                 if age > timeout_seconds {
-                    log::warn!("MQTT meter: smart_charge data is stale (age = {}s) - setting to false", age);
+                    log::warn!("Staleness check: smart_charge data is stale (age = {}s) - setting to false", age);
                     {
                         let mut data = CHADEMO_DATA.write().await;
                         data.update_smart_charge(false);
                     }
-
                 }
+                else {
+                    log::debug!("Staleness check: smart_charge data is fresh (age = {}s ≤ {}s timeout)",age, timeout_seconds);
+                }
+            } else{
+                log::warn!("Staleness check: No smart_charge_update timestamp found (never received data?)");
             }
         }
 
         // Check ev_drain_protection staleness
         {
-            //let data = CHADEMO_DATA.read().await;
+            log::debug!("Staleness check: Starting ev_drain_protection staleness check");
+
             if let Some(last_update) = snapshot.ev_drain_protection_update {
                 let age = last_update.elapsed().as_secs();
-                if age > timeout_seconds {
-                    log::warn!("MQTT meter: ev_drain_protection data is stale (age = {}s) - setting to false", age);
-                    {
-                        let mut data = CHADEMO_DATA.write().await;
-                        data.update_ev_drain_protection(false);
-                    }
 
+                if age > timeout_seconds {
+                    log::warn!(
+                        "Staleness check: ev_drain_protection data is stale (age = {}s) - setting to false",
+                        age
+                    );
+
+                    let mut data = CHADEMO_DATA.write().await;
+                    data.update_ev_drain_protection(false);
+                } else {
+                    log::debug!(
+                        "Staleness check: ev_drain_protection data is fresh (age = {}s ≤ {}s timeout)",
+                        age,
+                        timeout_seconds
+                    );
                 }
+            } else {
+                log::warn!(
+                    "Staleness check: No ev_drain_protection_update timestamp found (never received data?)"
+                );
             }
         }
-
 
     }
 }

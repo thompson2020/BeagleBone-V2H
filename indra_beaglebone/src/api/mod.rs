@@ -139,7 +139,6 @@ async fn process_ws_message(
                     let guard = CHADEMO_DATA.read().await;
                     *guard
                 };
-
                 let response = Response::Data(snapshot);
                 log::debug!("GetData response to client | {:?}", response);  
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
@@ -149,7 +148,6 @@ async fn process_ws_message(
                     let guard = CHADEMO.blocking_lock(); 
                     *guard.state()
                 };
-
                 let response = Response::Mode(mode);
 
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))

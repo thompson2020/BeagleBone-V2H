@@ -17,6 +17,9 @@ use tokio::time::sleep;
 use embedded_hal::i2c::{I2c, Operation as I2cOperation};
 use linux_embedded_hal::I2cdev;
 
+use crate::mqtt::CHADEMO_DATA;
+
+
 // https://www.nxp.com/docs/en/data-sheet/PCA9552.pdf
 const L1BS: u8 = 2 << 6;
 const L2BS: u8 = 2 << 4;
@@ -70,30 +73,63 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
     let mut gpio_events = pin.get_value_stream()?;
     while let Some(evt) = gpio_events.next().await {
         let val = evt.unwrap();
-        let opm = OPERATIONAL_MODE.lock().await;
+        //let opm = OPERATIONAL_MODE.lock().await;
         match (pin.get_pin_num(), val) {
             (BOOSTPIN, 0) => {
+
                 // send state update to toggle charge only
-                let params = ChargeParameters::default();
-                let new_mode = match *opm {
-                    OperationMode::V2h | OperationMode::Idle | OperationMode::Uninitalised => {
-                        OperationMode::Charge(params)
-                    }
-                    OperationMode::Charge(_) | OperationMode::Discharge(_) => OperationMode::Idle,
-                    _ => continue,
+                log::debug!("Panel: Boost Button Pressed" );
+                let current_mode = {
+                    let guard = CHADEMO_DATA.read().await;
+                    guard.state
                 };
-                log_error!("Boost button pressed", mode_tx.send(new_mode).await);
+                log::debug!("Panel: Boost Button - Current Mode: {:?}", current_mode);
+                if matches!(current_mode, OperationMode::Uninitalised |OperationMode::Idle | OperationMode::Discharge(_) | OperationMode::V2h) {
+                    log::debug!("Panel: Boost Button - Changing to Charge");
+                    let mut params = ChargeParameters::default();
+                    params.set_amps(16);
+                    params.set_soc_limit(95);
+                    let mode = OperationMode::Charge(params);
+                    log::debug!("Smart Charge mode created | {:?}", mode);
+                    if let Err(e) = mode_tx.send(mode).await {
+                        log::error!("Panel: failed to send mode: {:?}", e);
+                    }
+                } else if matches!(current_mode,  OperationMode::Charge(_) ) {
+                  log::debug!("Panel: Boost Button - Changing to Idle");
+                    let mode = OperationMode::Idle;
+                    log::debug!("Smart Charge mode created | {:?}", mode);
+                    if let Err(e) = mode_tx.send(mode).await {
+                        log::error!("Panel: failed to send mode: {:?}", e);
+                    }
+                }
+                log::info!("Panel: Boost Button - Completed");
+
             }
             (ONOFFPIN, 0) => {
-                // send state update to toggle Stage 1 or shutdown only
-                let new_mode = match *opm {
-                    OperationMode::Charge(_)
-                    | OperationMode::Idle
-                    | OperationMode::Uninitalised => OperationMode::V2h,
-                    OperationMode::V2h => OperationMode::Idle,
-                    _ => continue,
+
+                // send state update to toggle charge only
+                log::debug!("Panel: OnOff Button Pressed" );
+                let current_mode = {
+                    let guard = CHADEMO_DATA.read().await;
+                    guard.state
                 };
-                log_error!("OnOff button pressed", mode_tx.send(new_mode).await);
+                log::debug!("Panel: OnOff Button - Current Mode: {:?}", current_mode);
+                if matches!(current_mode, OperationMode::Uninitalised | OperationMode::Idle ) {
+                    log::debug!("Panel: OnOff Button - Changing to V2h");
+                    let mode = OperationMode::V2h;
+                    log::debug!("Smart Charge mode created | {:?}", mode);
+                    if let Err(e) = mode_tx.send(mode).await {
+                        log::error!("Panel: failed to send mode: {:?}", e);
+                    }
+                } else if matches!(current_mode, OperationMode::Charge(_) | OperationMode::Discharge(_) | OperationMode::V2h ) {
+                  log::debug!("Panel: OnOff Button - Changing to Idle");
+                    let mode = OperationMode::Idle;
+                    log::debug!("Smart Charge mode created | {:?}", mode);
+                    if let Err(e) = mode_tx.send(mode).await {
+                        log::error!("Panel: failed to send mode: {:?}", e);
+                    }
+                }
+                log::info!("Panel: OnOff Button - Completed");
             }
             _ => (),
         };
@@ -110,23 +146,22 @@ pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Resu
     };
 
     tokio::spawn(async move {
-        loop {
-            while let Some(event) = led_rx.recv().await {
-                let result = match event {
-                    LedCommand::Logo(colour) => pca.logo_led(colour),
-                    LedCommand::Buttons(b) => match b {
-                        ButtonTriggered::OnOff => pca.on_led_toggle(),
-                        ButtonTriggered::Boost => pca.boost_led_toggle(),
-                    },
-                    LedCommand::EnergyBar(val, discharging) => {
-                        pca.upper_from_percentage_animated(val, discharging)
-                    }
-                    LedCommand::SocBar(val) => pca.lower_from_percentage(val),
-                };
-                if let Err(e) = result {
-                    log::error!("panel_event_listener Error | {e:?}")
+        while let Some(event) = led_rx.recv().await {
+            let result = match event {
+                LedCommand::Logo(colour) => pca.logo_led(colour),
+                LedCommand::Buttons(b) => match b {
+                    ButtonTriggered::OnOff => pca.on_led_toggle(),
+                    ButtonTriggered::Boost => pca.boost_led_toggle(),
+                },
+                LedCommand::EnergyBar(val, discharging) => {
+                    pca.upper_from_percentage_animated(val, discharging)
                 }
+                LedCommand::SocBar(val) => pca.lower_from_percentage(val),
+            };
+            if let Err(e) = result {
+                log::error!("panel_event_listener Error | {e:?}")
             }
+            
         }
     });
     log::debug!("Starting buttons event listener");
