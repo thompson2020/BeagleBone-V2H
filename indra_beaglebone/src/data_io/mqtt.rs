@@ -266,7 +266,8 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
                 //if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
                 let payload_str = String::from_utf8_lossy(&msg.payload);
                 let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
-                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, clean_payload);
+                let readable_payload = clean_payload .replace(",", ", ").replace(":", ": ");
+                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
 
                 // Check if this is a command from the web GUI
                 if msg.topic == mqtt_config.sub {
@@ -671,7 +672,7 @@ pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: Cha
                     log::debug!("Staleness check: smart_charge data is fresh (age = {}s ≤ {}s timeout)",age, timeout_seconds);
                 }
             } else{
-                log::warn!("Staleness check: No smart_charge_update timestamp found (never received data?)");
+                log::debug!("Staleness check: No smart_charge_update timestamp found (never received data?)");
             }
         }
 

@@ -18,6 +18,8 @@ use embedded_hal::i2c::{I2c, Operation as I2cOperation};
 use linux_embedded_hal::I2cdev;
 
 use crate::mqtt::CHADEMO_DATA;
+use std::time::{Instant, Duration};
+
 
 
 // https://www.nxp.com/docs/en/data-sheet/PCA9552.pdf
@@ -71,8 +73,20 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
     pin.set_direction(Direction::In)?;
     pin.set_edge(Edge::FallingEdge)?;
     let mut gpio_events = pin.get_value_stream()?;
+    let mut last_trigger = Instant::now() - Duration::from_secs(10);  // far in the past
+    let debounce_duration = Duration::from_millis(500);               // 500ms debounce
     while let Some(evt) = gpio_events.next().await {
         let val = evt.unwrap();
+        if val != 0 {
+            continue;
+        } // button released, ignore
+
+        let now = Instant::now();
+        if now.duration_since(last_trigger) < debounce_duration {
+            log::debug!("Panel: IGNORED BOUNCE" );
+            continue;   // ignore bounce
+        }
+        last_trigger = now;
         //let opm = OPERATIONAL_MODE.lock().await;
         match (pin.get_pin_num(), val) {
             (BOOSTPIN, 0) => {
@@ -91,6 +105,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                     params.set_soc_limit(95);
                     let mode = OperationMode::Charge(params);
                     log::debug!("Smart Charge mode created | {:?}", mode);
+                    log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
@@ -98,6 +113,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                   log::debug!("Panel: Boost Button - Changing to Idle");
                     let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
+                    log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
@@ -118,6 +134,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                     log::debug!("Panel: OnOff Button - Changing to V2h");
                     let mode = OperationMode::V2h;
                     log::debug!("Smart Charge mode created | {:?}", mode);
+                    log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
@@ -125,6 +142,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                   log::debug!("Panel: OnOff Button - Changing to Idle");
                     let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
+                    log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
