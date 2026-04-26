@@ -12,7 +12,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
-
+use chrono::Timelike;
 
 use super::config::MqttConfig;
 use crate::data_io::config::MeterConfig;
@@ -464,22 +464,46 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
     // Update the stored state
     LAST_SMART_CHARGE.store(enabled, std::sync::atomic::Ordering::Relaxed);
 
+    let requested_soc: f32 = 85.0;
+    let cheap_start_min: u16 = 23 * 60 + 30; // 23:30      /// BODGE - READ FROM SCHEDULER / TIMED CHARGE SETTINGS INSTEAD
+    let cheap_end_min: u16 = 5 * 60 + 30;   // 05:30       /// BODGE - READ FROM SCHEDULER / TIMED CHARGE SETTINGS INSTEAD
+    let now = chrono::Local::now();
+    let current_min = (now.hour() * 60 + now.minute()) as u16;
+    let in_cheap_window = if cheap_start_min > cheap_end_min {
+        current_min >= cheap_start_min || current_min < cheap_end_min
+    } else {
+        current_min >= cheap_start_min && current_min < cheap_end_min
+    };
+
 
     if enabled {
+
         // Soft start: 1A for 15 seconds
-        let current_mode = {
+        let (current_mode, current_soc) = {
             let guard = CHADEMO_DATA.read().await;
-            guard.state
+            (guard.state, guard.soc)
         };
-        log::debug!("Smart Charge->false = Checking current mode is V2h: {:?}", current_mode);
+        log::debug!("Smart Charge->true = Checking current mode is V2h: {:?}", current_mode);
+        
+        //Checks - Not in V2h mode - ignore smart charge   
         if !matches!(current_mode, OperationMode::V2h) {
-            log::debug!("Smart Charge->true - IGNORED Action as the current mode not V2h: {:?}", current_mode);
+            log::debug!("Smart Charge->true - SKIPPED (current mode not V2h: {:?})", current_mode);
             return;
         }
+        //Check -  SoC > Target  - ignore smart charge 
+        if current_soc >= requested_soc {
+            log::info!("Smart Charge->true - SKIPPED (SoC {:.1}% >= target {:.1}%)", current_soc, requested_soc);
+            return;
+        }
+        //Check - Not in timed charge overnight - This will be ignored as we wont be in V2h mode
+
+
+
+        //smart charge - start at 1A then after 15s move to 16A  
         log::info!("Smart Charge->true - soft start at 1A for 15s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
-        params.set_soc_limit(85);
+        params.set_soc_limit(requested_soc as u8);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
         let tx = mode_tx.clone();
@@ -494,6 +518,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             let guard = CHADEMO_DATA.read().await;
             guard.state
         };
+        //2nd check incase someone has hit idle/off
         if !current_mode.is_charge() {
             log::warn!("Smart Charge->true - ABORTED(ramping to 16A) - no longer in Charge mode: {:?}", current_mode);
             return;
@@ -502,7 +527,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         log::info!("Smart Charge->true, soft start complete - ramping to 16A");
         let mut params = ChargeParameters::default();
         params.set_amps(16);
-        params.set_soc_limit(85);
+        params.set_soc_limit(requested_soc as u8);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
         let tx = mode_tx.clone();
@@ -515,6 +540,14 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         // TODO: Consider smoother ramp (e.g. 1A → 4A → 8A → 16A over time)
 
     } else {
+        //smartcharge flag set to false - return to v2h mode 
+        
+        // Check - Overnight charging
+        if in_cheap_window {
+            log::info!("Smart Charge->false IGNORED (cheap-rate window active) - BODGE - READ FROM SCHEDULER / TIMED CHARGE SETTINGS INSTEAD");
+            return;
+        }
+        
         // Soft stop: reduce to 1A for 15 seconds before returning to V2H
         let current_mode = {
             let guard = CHADEMO_DATA.read().await;
@@ -528,7 +561,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         log::info!("Smart Charge->false - soft stop at 1A for 15s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
-        params.set_soc_limit(85);
+        params.set_soc_limit(requested_soc as u8);
         let mode = OperationMode::Charge(params);
         log::debug!("Smart Charge mode created | {:?}", mode);
         let tx = mode_tx.clone();
