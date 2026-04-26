@@ -11,6 +11,8 @@ use crate::{
 use futures::future::join_all;
 use futures::StreamExt;
 use std::time::Duration;
+use std::time::Instant;
+
 use sysfs_gpio::{Direction, Edge, Pin};
 use tokio::time::sleep;
 
@@ -18,7 +20,6 @@ use embedded_hal::i2c::{I2c, Operation as I2cOperation};
 use linux_embedded_hal::I2cdev;
 
 use crate::mqtt::CHADEMO_DATA;
-use std::time::{Instant, Duration};
 
 
 
@@ -74,19 +75,27 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
     pin.set_edge(Edge::FallingEdge)?;
     let mut gpio_events = pin.get_value_stream()?;
     let mut last_trigger = Instant::now() - Duration::from_secs(10);  // far in the past
-    let debounce_duration = Duration::from_millis(500);               // 500ms debounce
+    let debounce_duration = Duration::from_millis(1000);               // 1000ms debounce
     while let Some(evt) = gpio_events.next().await {
         let val = evt.unwrap();
         if val != 0 {
             continue;
         } // button released, ignore
 
+        //de-Bounce logic
         let now = Instant::now();
-        if now.duration_since(last_trigger) < debounce_duration {
-            log::debug!("Panel: IGNORED BOUNCE" );
+        let time_since_last = now.duration_since(last_trigger);
+
+        if time_since_last < debounce_duration {
+            log::debug!("Panel: IGNORED BOUNCE | Time since last: {:?} (debounce: {:?})", time_since_last, debounce_duration);
             continue;   // ignore bounce
         }
+
+        // Button press accepted
         last_trigger = now;
+
+        log::debug!("Panel: Button press ACCEPTED | Time since last: {:?}", time_since_last);
+
         //let opm = OPERATIONAL_MODE.lock().await;
         match (pin.get_pin_num(), val) {
             (BOOSTPIN, 0) => {
@@ -98,20 +107,20 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                     guard.state
                 };
                 log::debug!("Panel: Boost Button - Current Mode: {:?}", current_mode);
-                if matches!(current_mode, OperationMode::Uninitalised |OperationMode::Idle | OperationMode::Discharge(_) | OperationMode::V2h) {
-                    log::debug!("Panel: Boost Button - Changing to Charge");
-                    let mut params = ChargeParameters::default();
-                    params.set_amps(16);
-                    params.set_soc_limit(95);
-                    let mode = OperationMode::Charge(params);
+                if matches!(current_mode, OperationMode::Charge(_) ) {
+                  log::debug!("Panel: Boost Button - Changing to Idle");
+                    let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
                     log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
-                } else if matches!(current_mode,  OperationMode::Charge(_) ) {
-                  log::debug!("Panel: Boost Button - Changing to Idle");
-                    let mode = OperationMode::Idle;
+                } else {
+                    log::debug!("Panel: Boost Button - Changing to Charge");
+                    let mut params = ChargeParameters::default();
+                    params.set_amps(16);
+                    params.set_soc_limit(95);
+                    let mode = OperationMode::Charge(params);
                     log::debug!("Smart Charge mode created | {:?}", mode);
                     log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
@@ -130,17 +139,17 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                     guard.state
                 };
                 log::debug!("Panel: OnOff Button - Current Mode: {:?}", current_mode);
-                if matches!(current_mode, OperationMode::Uninitalised | OperationMode::Idle ) {
-                    log::debug!("Panel: OnOff Button - Changing to V2h");
-                    let mode = OperationMode::V2h;
+                if matches!(current_mode, OperationMode::Charge(_) | OperationMode::Discharge(_) | OperationMode::V2h ) {
+                    log::debug!("Panel: OnOff Button - Changing to Idle");
+                    let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
                     log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
                         log::error!("Panel: failed to send mode: {:?}", e);
                     }
-                } else if matches!(current_mode, OperationMode::Charge(_) | OperationMode::Discharge(_) | OperationMode::V2h ) {
-                  log::debug!("Panel: OnOff Button - Changing to Idle");
-                    let mode = OperationMode::Idle;
+                } else {
+                    log::debug!("Panel: OnOff Button - Changing to V2h");
+                    let mode = OperationMode::V2h;
                     log::debug!("Smart Charge mode created | {:?}", mode);
                     log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
