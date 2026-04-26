@@ -46,19 +46,39 @@ static POOL: OnceCell<Database> = OnceCell::const_new();
  */
 #[tokio::main]
 async fn main() -> Result<(), &'static str> {
+    // ==================== STARTUP BANNER ====================
+    let build_time = std::fs::metadata(env!("CARGO_MANIFEST_DIR"))
+        .and_then(|m| m.modified())
+        .map(|t| chrono::DateTime::<chrono::Local>::from(t))
+        .unwrap_or_else(|_| chrono::Local::now());
+
+    println!("\n{}", "=".repeat(70));
+    println!("🚀 INDRA BEAGLEBONE V2H CHARGER");
+    println!("   Version     : {}", env!("CARGO_PKG_VERSION"));
+    println!("   Built       : {}", build_time.format("%Y-%m-%d %H:%M:%S"));
+    println!("   Started at  : {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z"));
+    println!("{}", "=".repeat(70));
+
     #[cfg(feature = "tracing")]
     console_subscriber::ConsoleLayer::builder()
         .retention(Duration::from_secs(60))
         .server_addr(([0, 0, 0, 0], 5556))
         .init();
 
-    // Force local timezone for timestamps
-    std::env::set_var("TZ", "Europe/London");
-
     #[cfg(feature = "logging-verbose")]
     simple_logger::init_with_level(log::Level::Trace).expect("Logger init failed");
     #[cfg(not(feature = "logging-verbose"))]
     simple_logger::init_with_level(log::Level::Debug).expect("Logger init failed");
+
+    log::info!("=== Indra BeagleBone service starting ===");
+    log::info!("Built: {}", build_time.format("%Y-%m-%d %H:%M:%S"));
+    // =======================================================
+
+
+
+
+
+
 
     POOL.get_or_try_init(|| async { Database::new().await })
         .await
