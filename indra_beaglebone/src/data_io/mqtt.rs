@@ -464,7 +464,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
     // Update the stored state
     LAST_SMART_CHARGE.store(enabled, std::sync::atomic::Ordering::Relaxed);
 
-    let requested_soc: f32 = 85.0;
+    let requested_soc: f32 = 80.0;
     let cheap_start_min: u16 = 23 * 60 + 30; // 23:30      /// BODGE - READ FROM SCHEDULER / TIMED CHARGE SETTINGS INSTEAD
     let cheap_end_min: u16 = 5 * 60 + 30;   // 05:30       /// BODGE - READ FROM SCHEDULER / TIMED CHARGE SETTINGS INSTEAD
     let now = chrono::Local::now();
@@ -474,11 +474,12 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
     } else {
         current_min >= cheap_start_min && current_min < cheap_end_min
     };
+    //Check(in_cheap_window) - Not checked to enable - This will be ignored as we wont be in V2h mode
 
 
     if enabled {
 
-        // Soft start: 1A for 15 seconds
+        // Soft start: 1A for 2 seconds
         let (current_mode, current_soc) = {
             let guard = CHADEMO_DATA.read().await;
             (guard.state, guard.soc)
@@ -490,17 +491,25 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             log::debug!("Smart Charge->true - SKIPPED (current mode not V2h: {:?})", current_mode);
             return;
         }
-        //Check -  SoC > Target  - ignore smart charge 
+        //Check -  SoC > Target  - ignore smart charge -> Immediate go to Idle
         if current_soc >= requested_soc {
-            log::info!("Smart Charge->true - SKIPPED (SoC {:.1}% >= target {:.1}%)", current_soc, requested_soc);
+            log::info!("Smart Charge->true - SoC > Request - GOING TO IDLE (SoC {:.1}% >= target {:.1}%)", current_soc, requested_soc);
+            let mode = OperationMode::Idle;
+            log::debug!("Smart Charge mode created | {:?}", mode);
+            let tx = mode_tx.clone();
+            tokio::spawn(async move {
+                if let Err(e) = tx.send(mode).await {
+                    log::error!("MQTT failed to send mode: {:?}", e);
+                }
+            });
+            log::info!("Smart Charge SWITCHED TO Idle");
             return;
         }
         //Check - Not in timed charge overnight - This will be ignored as we wont be in V2h mode
 
 
-
-        //smart charge - start at 1A then after 15s move to 16A  
-        log::info!("Smart Charge->true - soft start at 1A for 15s");
+        //smart charge - start at 1A then after 2s move to 16A  
+        log::info!("Smart Charge->true - soft start at 1A for 2s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
         params.set_soc_limit(requested_soc as u8);
@@ -513,7 +522,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             }
         });
         
-        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         let current_mode = {
             let guard = CHADEMO_DATA.read().await;
             guard.state
@@ -548,7 +557,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             return;
         }
         
-        // Soft stop: reduce to 1A for 15 seconds before returning to V2H
+        // Soft stop: reduce to 1A for 2 seconds before returning to V2H
         let current_mode = {
             let guard = CHADEMO_DATA.read().await;
             guard.state
@@ -558,7 +567,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             log::warn!("Smart Charge->false = IGNORED - not Idle/Charge: {:?}", current_mode);
             return;
         }
-        log::info!("Smart Charge->false - soft stop at 1A for 15s");
+        log::info!("Smart Charge->false - soft stop at 1A for 2s");
         let mut params = ChargeParameters::default();
         params.set_amps(1);
         params.set_soc_limit(requested_soc as u8);
@@ -571,7 +580,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             }
         });
 
-        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         let current_mode = {
             let guard = CHADEMO_DATA.read().await;
             guard.state
