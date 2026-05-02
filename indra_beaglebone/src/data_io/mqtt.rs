@@ -15,12 +15,12 @@ use tokio::time::sleep;
 use chrono::Timelike;
 
 use super::config::MqttConfig;
-use crate::data_io::config::MeterConfig;
+//use crate::data_io::config::MeterConfig;
 
-use crate::meter::update_total_power;
-use crate::meter::mark_total_power_as_stale;
-use crate::meter::update_phase_power;
-use crate::meter::mark_phase_power_as_stale;
+//use crate::meter::update_total_power;
+//use crate::meter::mark_total_power_as_stale;
+//use crate::meter::update_phase_power;
+//use crate::meter::mark_phase_power_as_stale;
 
 use crate::statics::ChademoTx;
 use crate::global_state::ChargeParameters;
@@ -174,41 +174,20 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
     
-	//MQTT meter Subscribe to meter topic only if mqtt_meter = enabled config.toml
-    if mqtt_config.mqtt_meter  {
+    //subscribe to smart charge topic
+    log::info!("MQTT meter: subscribing to: smart charge topic | {}", mqtt_config.mqtt_smart_charge_topic);
+    client.subscribe(&mqtt_config.mqtt_smart_charge_topic, QoS::AtMostOnce)
+        .await
+        .map_err(|e| IndraError::MqttSub(e))?;
 
-        //subscribe to total power topic
-        log::info!("MQTT meter: subscribing to:  total power topic | {}", mqtt_config.mqtt_meter_total_power_topic);
-        client.subscribe(&mqtt_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
-            .await
-            .map_err(|e| IndraError::MqttSub(e))?;
-    
-        // Subscribe to phase power topic (only if it's different from total power topic)
-        if mqtt_config.mqtt_meter_phase_power_topic != mqtt_config.mqtt_meter_total_power_topic {
-            log::info!("MQTT meter: subscribing to: phase power | {}", mqtt_config.mqtt_meter_phase_power_topic);
-            client.subscribe(&mqtt_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
-                .await
-                .map_err(|e| IndraError::MqttSub(e))?;
-            }
-        
-        //subscribe to smart charge topic
-        log::info!("MQTT meter: subscribing to: smart charge topic | {}", mqtt_config.mqtt_smart_charge_topic);
-        client.subscribe(&mqtt_config.mqtt_smart_charge_topic, QoS::AtMostOnce)
-            .await
-            .map_err(|e| IndraError::MqttSub(e))?;
+    //subscribe to ev_drain_protection topic
+    log::info!("MQTT meter: subscribing to: ev_drain_protection topic | {}", mqtt_config.mqtt_ev_drain_protection_topic);
+    client.subscribe(&mqtt_config.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
+        .await
+        .map_err(|e| IndraError::MqttSub(e))?;
 
-        //subscribe to ev_drain_protection topic
-        log::info!("MQTT meter: subscribing to: ev_drain_protection topic | {}", mqtt_config.mqtt_ev_drain_protection_topic);
-        client.subscribe(&mqtt_config.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
-            .await
-            .map_err(|e| IndraError::MqttSub(e))?;
-
-        log::info!("MQTT meter: Spawn Staleness check");
-        let mode_tx_for_staleness = mode_tx.clone();
-        tokio::spawn(start_meter_staleness_checker(mqtt_config.clone(), mode_tx_for_staleness));
-    } else {
-        log::debug!("MQTT meter: mqtt_meter = false, skipping mqtt and meter subscription");
-    }
+    log::info!("MQTT meter: Spawn Staleness check");
+    tokio::spawn(start_staleness_checker(mqtt_config.clone()));
 
 
 
@@ -285,17 +264,6 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
                     // }
                 }
 
-                // If it's our total meter topic, pass raw payload to meter.rs
-                if msg.topic == mqtt_config.mqtt_meter_total_power_topic {
-                    log::debug!("MQTT message from topic: meter total (check field) | {} field: {}", msg.topic, mqtt_config.mqtt_meter_total_power_field);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_meter_total_power_field.clone(), mqtt_config.mqtt_meter_total_power_scale.clone(), mqtt_config, &mode_tx,  ).await;
-                }
-
-                // If it's our phase meter topic, pass raw payload to meter.rs
-                if msg.topic == mqtt_config.mqtt_meter_phase_power_topic {
-                    log::debug!("MQTT message from topic: meter phase (check field) | {} field: {}", msg.topic, mqtt_config.mqtt_meter_phase_power_field);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_meter_phase_power_field.clone(), mqtt_config.mqtt_meter_phase_power_scale.clone(), mqtt_config, &mode_tx  ).await;
-                }
 
                 // If it's our smart_charge_topic, pass raw payload to meter.rs
                 if msg.topic == mqtt_config.mqtt_smart_charge_topic {
@@ -319,7 +287,6 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
 
     ControlFlow::Continue(())
 }
-
 
 
 pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String, scale: f32, mqtt_config: &MqttConfig, mode_tx: &ChademoTx) {
@@ -372,26 +339,6 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
     
     
     match (topic.as_str(), mqtt_field.as_str()) {
-
-        // ===================== TOTAL POWER =====================
-        (t, f)
-            if t == mqtt_config.mqtt_meter_total_power_topic
-            && f == mqtt_config.mqtt_meter_total_power_field =>
-        {
-            log::debug!("MQTT: calling update_total_power | {}", scaled_val);
-            update_total_power(scaled_val).await;
-            return;
-        }
-
-        // ===================== PHASE POWER =====================
-        (t, f)
-            if t == mqtt_config.mqtt_meter_phase_power_topic
-            && f == mqtt_config.mqtt_meter_phase_power_field =>
-        {
-            log::debug!("MQTT: calling update_phase_power | {}", scaled_val);
-            update_phase_power(scaled_val).await;
-            return;
-        }
 
         // ===================== SMART CHARGE =====================
         (t, f)
@@ -626,11 +573,11 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
 
 
 // Background task to check if any MQTT meter data is stale
-pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: ChademoTx) {
+pub async fn start_staleness_checker(mqtt_config: MqttConfig) {
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
-        let timeout_seconds = mqtt_config.mqtt_meter_timeout_seconds;
+        let timeout_seconds = mqtt_config.mqtt_timeout_seconds;
 
         log::debug!("Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
 
@@ -639,63 +586,6 @@ pub async fn start_meter_staleness_checker(mqtt_config: MqttConfig, mode_tx: Cha
             *data
         };
 
-
-       // Check total power staleness
-        {
-            log::debug!("Staleness check: Starting total power check");
-
-            //let data = CHADEMO_DATA.read().await;
-            //log::debug!("Staleness check: Acquired read lock on CHADEMO_DATA");
-
-            if let Some(last_update) = snapshot.last_total_power_update {
-                log::debug!("Staleness check: last_total_power_update found");
-
-                let age = last_update.elapsed().as_secs();
-                log::debug!("Staleness check: total power age = {} seconds", age);
-
-                if age > timeout_seconds {
-                    log::warn!("Staleness check:  total power data is STALE (age = {}s > {}s timeout)", 
-                            age, timeout_seconds);
-
-                    // Safety: Only force Idle if currently in V2H
-                    if snapshot.state == OperationMode::V2h {
-                        log::warn!("Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
-                        let _ = mode_tx.send(OperationMode::Idle).await;
-                    } else {
-                        log::info!("Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)", 
-                                   snapshot.state);
-                    }
-                    log::debug!("Staleness check: mark_total_power_as_stale()");
-                    crate::meter::mark_total_power_as_stale().await;
-                } else {
-                    log::debug!("Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }
-            } else {
-                log::warn!("Staleness check: No last_total_power_update timestamp found (never received data?)");
-            }
-
-            log::debug!("Staleness check: Finished total power check");
-        }
-
-
-
-
-      // Check phase power staleness
-        {
-            //let data = CHADEMO_DATA.read().await;
-            log::debug!("Staleness check: Starting phase power staleness check");            
-            if let Some(last_update) = snapshot.last_phase_power_update {
-                let age = last_update.elapsed().as_secs();
-                if age > timeout_seconds {
-                    log::warn!("Staleness check: phase power data is stale (age = {}s)", age);
-                    crate::meter::mark_phase_power_as_stale().await;
-                } else {
-                    log::debug!("Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }   
-            } else {
-                log::warn!("Staleness check: No last_phase_power_update timestamp found (never received data?)");
-            }   
-        }
 
         // Check smart_charge staleness
         {

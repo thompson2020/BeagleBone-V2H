@@ -15,6 +15,7 @@ cd "$PROJECT_DIR"
 
 echo "→ Running cargo zigbuild..."
 cargo zigbuild --target $TARGET --release
+#cargo check
 
 echo "✅ Build completed successfully!"
 

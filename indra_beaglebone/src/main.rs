@@ -93,7 +93,7 @@ async fn main() -> Result<(), &'static str> {
     let _pca9552_reset = state::pin_init_out_high(state::RESETPCAPIN).unwrap();
     let _master = state::pin_init_out_high(state::MASTERCONTACTOR).unwrap();
 
-    tokio::spawn(meter::meter(app_config.meter.clone())); // rtu over tcp SDM230 modbus meter
+    tokio::spawn(meter::meter(app_config.meter.clone(), mode_tx.clone())); // rtu over tcp SDM230 modbus meter
     tokio::spawn(panel::panel_event_listener(led_rx, mode_tx.clone()));
     tokio::spawn(scheduler::init(events_rx, mode_tx.clone()));
     tokio::spawn(api::run(events_tx, mode_tx.clone()));

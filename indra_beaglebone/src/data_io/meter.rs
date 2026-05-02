@@ -16,96 +16,272 @@ use tokio::{
 use serde_json::Value;
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
+use std::ops::ControlFlow;
+use crate::global_state::OperationMode;
+use crate::statics::ChademoTx;
+
+
 lazy_static::lazy_static! {
     pub static ref METER: Arc<RwLock<Option<f32>>> = Arc::new(RwLock::new(Some(0f32)));
 }
 
-pub async fn meter(config: MeterConfig) -> Result<(), IndraError> {
+pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), IndraError> {
     log::info!("Starting thread: meter   | {}", tokio::task::id());
 
 
-    // MQTT meter additions - Check which meter source to use
-    if config.modbus_meter {
-       log::info!("Modbus meter enabled | Modbus");
-            // Existing Modbus code continues below...
+    if meter_config.meter_type.to_lowercase() != "mqtt" {
+        ////////////////////////////////////////////////
+        //      modbus meter code
+        ////////////////////////////////////////////////
+        log::info!("Modbus meter enabled | Modbus");
+
+        // let config = &APP_CONFIG.clone();s
+        let address = meter_config.address.clone();
+        let socket_addr: SocketAddr = address
+            .parse::<SocketAddr>()
+            .map_err(|e| IndraError::SocketError(e))?;
+        log::info!(
+            "Connecting to RTU meter:  | IP:{:?} port:{}",
+            socket_addr.ip(),
+            socket_addr.port()
+        );
+        loop {
+            let mut stream = TcpStream::connect(socket_addr)
+                .await
+                .map_err(|e| IndraError::SocketConnectError(e))?;
+            let (mut rx, mut tx) = stream.split();
+
+            // Raw modbus params for SDM230 @ 1hz
+            let device_id = 1;
+            let function_code = 0x04; // Read Holding Registers
+            let starting_address = 0x0c;
+            let quantity = 2;
+
+            let request =
+                energy_modbus_rtu_request(device_id, function_code, starting_address, quantity);
+            log::info!("SDM230 modbus PDU: | {request:02x?}");
+            let mut val = 0.1f32;
+
+            'inner: loop {
+                let mut buf = [0u8; 24];
+                let instant = Instant::now();
+                if let Err(e) = tx.write(&request).await {
+                    log::error!("TCP write error | {e:?}");
+                    break 'inner;
+                }
+
+                match timeout(Duration::from_millis(400), rx.read(&mut buf)).await {
+                    Ok(Ok(_)) => {
+                        // Strange blank meter readings
+                        if buf[3..=6] != [0, 0, 0, 0] {
+                            val =
+                                f32::from_be_bytes(buf[3..=6].try_into().unwrap_or(val.to_be_bytes()));
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Meter TCP timeout | {e:?}");
+                        break 'inner;
+                    }
+                    _ => {
+                        log::error!("Meter TCP read error");
+                        break 'inner;
+                    }
+                };
+
+                log::info!("Meter value  | {} ", val);
+                *METER.write().await = Some(val);
+                {
+                    let mut data = CHADEMO_DATA.write().await;
+                    data.from_meter(val,false);
+                }
+                
+                if instant.elapsed() < Duration::from_millis(500) {
+                    sleep(Duration::from_millis(500) - instant.elapsed()).await
+                }
+            }
+            *METER.clone().write().await = None;
+            drop(stream)
+        }
+
     }
-    /*
     else {
-        log::info!("Modbus meter not enabled - Adding Staleness check for mqtt meter");
-        // meter subscribe is now handled in mqtt.rs
-        tokio::spawn(start_meter_staleness_checker(config));
+        ////////////////////////////////////////////////
+        //          mqtt meter code
+        ////////////////////////////////////////////////
+        log::info!("Mqtt meter enabled | Mqtt");
+
+        // Clone the values we need BEFORE they are moved into mqttoptions
+        let client_id = meter_config.mqtt_meter_client_id.clone();
+        let host = meter_config.mqtt_meter_host.clone();
+        let port = meter_config.mqtt_meter_port;
+        let mut mqttoptions = MqttOptions::new(client_id, host, port);
+        mqttoptions.set_keep_alive(Duration::from_secs(5));
+        let username = meter_config.mqtt_meter_username.clone();
+        let password = meter_config.mqtt_meter_password.clone();
+        mqttoptions.set_credentials(username, password);
+        mqttoptions.set_transport(rumqttc::Transport::Tcp);
+        mqttoptions.set_clean_session(true);
+        let (client, mut eventloop) = AsyncClient::new(mqttoptions, 2);
+        
+        // Clone configs for the spawned task so we can still use them later in this function
+        let meter_config_clone = meter_config.clone();
+
+        
+        tokio::spawn(async move {
+            loop {
+                if let Ok(mqtt_event) = eventloop.poll().await {
+                    if let ControlFlow::Break(_) = handle_mqtt_meter_event(mqtt_event, &meter_config_clone).await {
+                        continue;
+                    }
+                };
+            }
+        });
+
+
+        //subscribe to total power topic
+        log::info!("MQTT meter: subscribing to:  total power topic | {}", meter_config.mqtt_meter_total_power_topic);
+        client.subscribe(&meter_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
+            .await
+            .map_err(|e| IndraError::MqttSub(e))?;
+    
+        // Subscribe to phase power topic (only if it's different from total power topic)
+        if meter_config.mqtt_meter_phase_power_topic != meter_config.mqtt_meter_total_power_topic {
+            log::info!("MQTT meter: subscribing to: phase power | {}", meter_config.mqtt_meter_phase_power_topic);
+            client.subscribe(&meter_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
+                .await
+                .map_err(|e| IndraError::MqttSub(e))?;
+            }
+        
+        log::info!("MQTT meter: Spawn Staleness check");
+        let mode_tx_for_staleness = mode_tx.clone();
+        tokio::spawn(start_meter_staleness_checker(meter_config.clone(), mode_tx_for_staleness));
+    
         return Ok(());
     }
-*/
 
-    // let config = &APP_CONFIG.clone();s
-    let address = config.address.clone();
-    let socket_addr: SocketAddr = address
-        .parse::<SocketAddr>()
-        .map_err(|e| IndraError::SocketError(e))?;
-    log::info!(
-        "Connecting to RTU meter:  | IP:{:?} port:{}",
-        socket_addr.ip(),
-        socket_addr.port()
-    );
-    loop {
-        let mut stream = TcpStream::connect(socket_addr)
-            .await
-            .map_err(|e| IndraError::SocketConnectError(e))?;
-        let (mut rx, mut tx) = stream.split();
+}
 
-        // Raw modbus params for SDM230 @ 1hz
-        let device_id = 1;
-        let function_code = 0x04; // Read Holding Registers
-        let starting_address = 0x0c;
-        let quantity = 2;
+async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &MeterConfig) -> ControlFlow<()> {
+    use rumqttc::Event::*;
 
-        let request =
-            energy_modbus_rtu_request(device_id, function_code, starting_address, quantity);
-        log::info!("SDM230 modbus PDU: | {request:02x?}");
-        let mut val = 0.1f32;
+    match mqtt_event {
+        Incoming(mqtt_in) => {
+            if let rumqttc::Packet::Publish(msg) = mqtt_in {
+                //if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
+                let payload_str = String::from_utf8_lossy(&msg.payload);
+                let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
+                let readable_payload = clean_payload .replace(",", ", ").replace(":", ": ");
+                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
 
-        'inner: loop {
-            let mut buf = [0u8; 24];
-            let instant = Instant::now();
-            if let Err(e) = tx.write(&request).await {
-                log::error!("TCP write error | {e:?}");
-                break 'inner;
-            }
-
-            match timeout(Duration::from_millis(400), rx.read(&mut buf)).await {
-                Ok(Ok(_)) => {
-                    // Strange blank meter readings
-                    if buf[3..=6] != [0, 0, 0, 0] {
-                        val =
-                            f32::from_be_bytes(buf[3..=6].try_into().unwrap_or(val.to_be_bytes()));
-                    }
+                // If it's our total meter topic, pass raw payload to meter.rs
+                if msg.topic == meter_config.mqtt_meter_total_power_topic {
+                    log::debug!("MQTT message from topic: meter total (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_total_power_field);
+                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_total_power_field.clone(), meter_config.mqtt_meter_total_power_scale.clone(), meter_config   ).await;
                 }
-                Err(e) => {
-                    log::error!("Meter TCP timeout | {e:?}");
-                    break 'inner;
-                }
-                _ => {
-                    log::error!("Meter TCP read error");
-                    break 'inner;
-                }
-            };
 
-            log::info!("Meter value  | {} ", val);
-            *METER.write().await = Some(val);
-            {
-                let mut data = CHADEMO_DATA.write().await;
-                data.from_meter(val,false);
-            }
-            
-            if instant.elapsed() < Duration::from_millis(500) {
-                sleep(Duration::from_millis(500) - instant.elapsed()).await
+                // If it's our phase meter topic, pass raw payload to meter.rs
+                if msg.topic == meter_config.mqtt_meter_phase_power_topic {
+                    log::debug!("MQTT message from topic: meter phase (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_phase_power_field);
+                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_phase_power_field.clone(), meter_config.mqtt_meter_phase_power_scale.clone(), meter_config  ).await;
+                }
+                
             }
         }
-        *METER.clone().write().await = None;
-        drop(stream)
+        Outgoing(_) => {
+            // ignore MQTT acks / publishes from client
+        }
+       
     }
+
+    ControlFlow::Continue(())
 }
+
+
+pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String, scale: f32, meter_config: &MeterConfig) {
+    let payload_trim = payload.trim();
+
+    // Now update the correct value
+    log::debug!("MQTT: Extracting topic & field: | {} , {}", topic, mqtt_field );
+
+    // Case 1: Plain number
+    let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
+        log::debug!("MQTT: value extracted(plain number): | {:.2} W", val);
+        val
+    } 
+    // Case 2: JSON object
+    else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
+        let mut current = &json;
+        for key in mqtt_field.split('.') {
+            current = match current.get(key) {
+                Some(v) => v,
+                None => {
+                    log::warn!("MQTT: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
+                    return;
+                }
+            };
+        }
+
+        match current.as_f64() {
+            Some(v) => {
+                let val = v as f32;
+                log::debug!("MQTT: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
+                val
+            }
+            None => {
+                log::warn!("MQTT: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
+                return;
+            }
+        }
+    } 
+    else {
+        log::warn!("MQTT: failed to parse as number or JSON | payload: {}", payload_trim);
+        return;
+    };
+
+    let scaled_val = val * scale;
+    if scale != 1.0 {
+        log::debug!("MQTT: scaled value by {} | {:.2}", scale, scaled_val);
+    }
+
+    
+    
+    
+    match (topic.as_str(), mqtt_field.as_str()) {
+
+        // ===================== TOTAL POWER =====================
+        (t, f)
+            if t == meter_config.mqtt_meter_total_power_topic
+            && f == meter_config.mqtt_meter_total_power_field =>
+        {
+            log::debug!("MQTT: calling update_total_power | {}", scaled_val);
+            update_total_power(scaled_val).await;
+            return;
+        }
+
+        // ===================== PHASE POWER =====================
+        (t, f)
+            if t == meter_config.mqtt_meter_phase_power_topic
+            && f == meter_config.mqtt_meter_phase_power_field =>
+        {
+            log::debug!("MQTT: calling update_phase_power | {}", scaled_val);
+            update_phase_power(scaled_val).await;
+            return;
+        }
+
+
+
+        // ===================== UNKNOWN =====================
+        _ => {
+            log::warn!("MQTT: unknown topic/field | {} / {}", topic, mqtt_field);
+        }
+    }
+
+
+
+}
+
+
+
 
 
 
@@ -148,24 +324,89 @@ pub async fn mark_phase_power_as_stale() {
 
 
 
-// Background task to check if meter data is stale
-/*
-pub async fn start_meter_staleness_checker(meter_config: MeterConfig) {
-    loop {
-        sleep(Duration::from_secs(10)).await;
 
-        //let age = LAST_METER_UPDATE.lock().await.elapsed().as_secs();
-        log::debug!("MQTT meter: data age  | {} seconds", age);
-        if age > meter_config.mqtt_meter_timeout_seconds {
-            
+
+
+
+
+
+// Background task to check if any MQTT meter data is stale
+pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: ChademoTx) {
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        let timeout_seconds = meter_config.mqtt_meter_timeout_seconds;
+
+        log::debug!("Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
+
+        let snapshot = {
+            let data = CHADEMO_DATA.read().await;
+            *data
+        };
+
         
-            log::error!("MQTT meter: data is stale - treating as offline  | {} seconds", age);
-            *METER.write().await = None;
-            CHADEMO_DATA.write().await.from_meter(0.0);
+       // Check total power staleness
+        {
+            log::debug!("Staleness check: Starting total power check");
+
+            //let data = CHADEMO_DATA.read().await;
+            //log::debug!("Staleness check: Acquired read lock on CHADEMO_DATA");
+
+            if let Some(last_update) = snapshot.last_total_power_update {
+                log::debug!("Staleness check: last_total_power_update found");
+
+                let age = last_update.elapsed().as_secs();
+                log::debug!("Staleness check: total power age = {} seconds", age);
+
+                if age > timeout_seconds {
+                    log::warn!("Staleness check:  total power data is STALE (age = {}s > {}s timeout)", 
+                            age, timeout_seconds);
+
+                    // Safety: Only force Idle if currently in V2H
+                    if snapshot.state == OperationMode::V2h {
+                        log::warn!("Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
+                        let _ = mode_tx.send(OperationMode::Idle).await;
+                    } else {
+                        log::info!("Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)", 
+                                   snapshot.state);
+                    }
+                    log::debug!("Staleness check: mark_total_power_as_stale()");
+                    crate::meter::mark_total_power_as_stale().await;
+                } else {
+                    log::debug!("Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
+                }
+            } else {
+                log::warn!("Staleness check: No last_total_power_update timestamp found (never received data?)");
+            }
+
+            log::debug!("Staleness check: Finished total power check");
         }
+
+
+
+
+      // Check phase power staleness
+        {
+            //let data = CHADEMO_DATA.read().await;
+            log::debug!("Staleness check: Starting phase power staleness check");            
+            if let Some(last_update) = snapshot.last_phase_power_update {
+                let age = last_update.elapsed().as_secs();
+                if age > timeout_seconds {
+                    log::warn!("Staleness check: phase power data is stale (age = {}s)", age);
+                    crate::meter::mark_phase_power_as_stale().await;
+                } else {
+                    log::debug!("Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
+                }   
+            } else {
+                log::warn!("Staleness check: No last_phase_power_update timestamp found (never received data?)");
+            }   
+        }
+
     }
 }
-*/
+
+
+
 
 
 

@@ -1,0 +1,1195 @@
+warning: redundant field names in struct initialization
+   --> chademo_v2/src/lib.rs:480:13
+    |
+480 |             discharge_current: discharge_current,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace it with: `discharge_current`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_field_names
+    = note: `#[warn(clippy::redundant_field_names)]` on by default
+
+warning: redundant field names in struct initialization
+   --> chademo_v2/src/lib.rs:482:13
+    |
+482 |             input_current: input_current,
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace it with: `input_current`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_field_names
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+  --> chademo_v2/src/lib.rs:21:32
+   |
+21 |         let data = data_sanity(&frame, 0x100, 8);
+   |                                ^^^^^^ help: change this to: `frame`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+   = note: `#[warn(clippy::needless_borrow)]` on by default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+  --> chademo_v2/src/lib.rs:47:32
+   |
+47 |         let data = data_sanity(&frame, 0x101, 8);
+   |                                ^^^^^^ help: change this to: `frame`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:100:32
+    |
+100 |         let data = data_sanity(&frame, 0x102, 8);
+    |                                ^^^^^^ help: change this to: `frame`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:123:9
+    |
+123 |     /// — If the EVSE’s output exceeds the maximum charge current continually, the flag shall be changed to 1. The overcurrent threshold shall be set at 10 A (absolute value) or more, and the ...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+    = note: `#[warn(clippy::doc_lazy_continuation)]` on by default
+help: indent this line
+    |
+123 |     ///   — If the EVSE’s output exceeds the maximum charge current continually, the flag shall be changed to 1. The overcurrent threshold shall be set at 10 A (absolute value) or more, and the time threshold shall be set at 5sec or more
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:124:9
+    |
+124 |     /// — If the EVSE’s input exceeds the range of the maximum discharge current continually, the flag shall be changed to 1. The overcurrent threshold shall be set at 10 A (absolute value) or...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+124 |     ///   — If the EVSE’s input exceeds the range of the maximum discharge current continually, the flag shall be changed to 1. The overcurrent threshold shall be set at 10 A (absolute value) or more and the time threshold shall be set at 5sec or more
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:125:9
+    |
+125 |     /// — The vehicle charge/discharge enabled and switch (k) shall be turned off at the same time
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+125 |     ///   — The vehicle charge/discharge enabled and switch (k) shall be turned off at the same time
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:133:9
+    |
+133 |     /// Regardless of opto-coupler (j) status, the EVSE shall regard this flag as charging termination order from the vehicle if it is equal to 1, and stop charging.
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+133 |     ///   Regardless of opto-coupler (j) status, the EVSE shall regard this flag as charging termination order from the vehicle if it is equal to 1, and stop charging.
+    |         ++
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+   --> chademo_v2/src/lib.rs:136:1
+    |
+136 | impl Into<bool> for X102Faults {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+            https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+    = note: `#[warn(clippy::from_over_into)]` on by default
+help: replace the `Into` implementation with `From<X102Faults>`
+    |
+136 ~ impl From<X102Faults> for bool {
+137 ~     fn from(val: X102Faults) -> Self {
+138 ~         val.fault_battery_voltage_deviation
+139 ~             | val.fault_high_battery_temperature
+140 ~             | val.fault_battery_current_deviation
+141 ~             | val.fault_battery_undervoltage
+142 ~             | val.fault_battery_overvoltage
+    |
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:162:9
+    |
+162 |     /// The value shall be set from the first time of the CAN communication, and it shall not be updated. However, if it is inevitable to reset the value, e.g. for battery protection, the valu...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+162 |     ///   The value shall be set from the first time of the CAN communication, and it shall not be updated. However, if it is inevitable to reset the value, e.g. for battery protection, the value is updated from 1 to 0 and only discharging shall be prohibited. — The value indicates the compatibility with the V2H charge/discharge mode (compatible: 1, incompatible: 0)
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:166:9
+    |
+166 |     /// This value shall be updated until initial value of “Charging current request” is set. Do not update this value after initial value transmission.
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+166 |     ///   This value shall be updated until initial value of “Charging current request” is set. Do not update this value after initial value transmission.
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:170:9
+    |
+170 |     /// Set the flag to 0 when the vehicle relay is closed, and set as 1 after the termination of welding detection. - Set the flag to 0 when the vehicle relay is closed, and set as 1 after th...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+170 |     ///    Set the flag to 0 when the vehicle relay is closed, and set as 1 after the termination of welding detection. - Set the flag to 0 when the vehicle relay is closed, and set as 1 after the termination of welding detection.
+    |         +++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:174:9
+    |
+174 |     /// Update as needed, and hold “1” after the malfunction is determined. — Regardless of the condition of the opto-coupler (j), if this flag is 0, it shall be considered as the vehicle's re...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+174 |     ///   Update as needed, and hold “1” after the malfunction is determined. — Regardless of the condition of the opto-coupler (j), if this flag is 0, it shall be considered as the vehicle's request to stop charging/discharging, and the EVSE shall move to the stop control.
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:178:9
+    |
+178 |     /// — Set this flag to 0 when the shift lever is in “parking” position. Set to 1 when it is in other position. — Turn the switch (k) OFF if the shift position is changed except “parking” d...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+178 |     ///   — Set this flag to 0 when the shift lever is in “parking” position. Set to 1 when it is in other position. — Turn the switch (k) OFF if the shift position is changed except “parking” during charging.
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:182:9
+    |
+182 |     /// Charging/discharging enabled: 1, charging/discharging disabled: 0
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+182 |     ///   Charging/discharging enabled: 1, charging/discharging disabled: 0
+    |         ++
+
+warning: doc list item without indentation
+   --> chademo_v2/src/lib.rs:183:9
+    |
+183 |     /// — After CAN communication starts and the vehicle sends the EVSE data required for prior to a start of charging/discharging, change the flag 0 to 1. — Change this flag 1 to 0 when the v...
+    |         ^
+    |
+    = help: if this is supposed to be its own paragraph, add a blank line
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#doc_lazy_continuation
+help: indent this line
+    |
+183 |     ///   — After CAN communication starts and the vehicle sends the EVSE data required for prior to a start of charging/discharging, change the flag 0 to 1. — Change this flag 1 to 0 when the vehicle sends the “charging/discharging stop” notification to the EVSE. Regardless of the condition of the opto-coupler (j), if this flag is 0, it shall be considered as the vehicle's request to stop charging/discharging, and the EVSE shall move to the stop control.— When this flag is 0, the insulation test shall not be conducted.
+    |         ++
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+   --> chademo_v2/src/lib.rs:212:1
+    |
+212 | impl Into<u8> for X102Status {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+            https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+help: replace the `Into` implementation with `From<X102Status>`
+    |
+212 ~ impl From<X102Status> for u8 {
+213 ~     fn from(val: X102Status) -> Self {
+214 |         let mut result: u8 = 0;
+215 |
+216 ~         result |= (val.status_discharge_compatible as u8) << 7;
+217 ~         result |= (val.status_normal_stop_request as u8) << 4;
+218 ~         result |= (val.status_vehicle as u8) << 3;
+219 ~         result |= (val.status_charging_system as u8) << 2;
+220 ~         result |= (val.status_vehicle_shifter_position as u8) << 1;
+221 ~         result |= val.status_vehicle_charging as u8;
+    |
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+   --> chademo_v2/src/lib.rs:326:1
+    |
+326 | impl Into<u8> for X109Status {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+            https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+help: replace the `Into` implementation with `From<X109Status>`
+    |
+326 ~ impl From<X109Status> for u8 {
+327 ~     fn from(val: X109Status) -> Self {
+328 |         let mut result = 0u8;
+329 ~         result |= (val.status_charger_stop_control as u8) << 5;
+330 ~         result |= (val.fault_charging_system_malfunction as u8) << 4;
+331 ~         result |= (val.fault_battery_incompatibility as u8) << 3;
+332 ~         result |= (val.status_vehicle_connector_lock as u8) << 2;
+333 ~         result |= (val.fault_station_malfunction as u8) << 1;
+334 ~         result |= (val.status_station as u8) << 0;
+    |
+
+warning: this operation has no effect
+   --> chademo_v2/src/lib.rs:334:19
+    |
+334 |         result |= (self.status_station as u8) << 0;
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider reducing it to: `((self.status_station as u8))`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#identity_op
+    = note: `#[warn(clippy::identity_op)]` on by default
+
+warning: field assignment outside of initializer for an instance created with Default::default()
+   --> chademo_v2/src/lib.rs:341:9
+    |
+341 |         x109status.status_charger_stop_control = get_bit(value, 5);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: consider initializing the variable with `X109Status { status_charger_stop_control: get_bit(value, 5), fault_charging_system_malfunction: get_bit(value, 4), fault_battery_incompatibility: get_bit(value, 3), status_vehicle_connector_lock: get_bit(value, 2), fault_station_malfunction: get_bit(value, 1), status_station: get_bit(value, 0) }` and removing relevant reassignments
+   --> chademo_v2/src/lib.rs:340:9
+    |
+340 |         let mut x109status = X109Status::default();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#field_reassign_with_default
+    = note: `#[warn(clippy::field_reassign_with_default)]` on by default
+
+warning: casting to the same type is unnecessary (`u8` -> `u8`)
+   --> chademo_v2/src/lib.rs:369:21
+    |
+369 |         result[3] = (self.output_current) as u8;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `(self.output_current)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#unnecessary_cast
+    = note: `#[warn(clippy::unnecessary_cast)]` on by default
+
+warning: field assignment outside of initializer for an instance created with Default::default()
+   --> chademo_v2/src/lib.rs:379:9
+    |
+379 |         status.status_charger_stop_control = true;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: consider initializing the variable with `X109Status { status_charger_stop_control: true, ..Default::default() }` and removing relevant reassignments
+   --> chademo_v2/src/lib.rs:378:9
+    |
+378 |         let mut status = X109Status::default();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#field_reassign_with_default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:393:32
+    |
+393 |         let data = data_sanity(&frame, 0x109, 8);
+    |                                ^^^^^^ help: change this to: `frame`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:439:32
+    |
+439 |         let data = data_sanity(&frame, 0x200, 8);
+    |                                ^^^^^^ help: change this to: `frame`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:517:32
+    |
+517 |         let data = data_sanity(&frame, 0x208, 8);
+    |                                ^^^^^^ help: change this to: `frame`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:553:32
+    |
+553 |         let data = data_sanity(&frame, 0x209, 8);
+    |                                ^^^^^^ help: change this to: `frame`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> chademo_v2/src/lib.rs:576:5
+    |
+576 |     &frame.data()
+    |     ^^^^^^^^^^^^^ help: change this to: `frame.data()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: `chademo_v2` (lib) generated 28 warnings (run `cargo clippy --fix --lib -p chademo_v2` to apply 15 suggestions)
+    Checking indra_beaglebone v0.0.1 (/home/unit/BeagleBone-V2H/indra_beaglebone)
+warning: this is a decimal constant
+   --> indra_beaglebone/src/pre_charger/can.rs:103:28
+    |
+103 |                     [0x4b, 01, 21, a, b, 00, 00, 00] => {
+    |                            ^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#zero_prefixed_literal
+    = note: `#[warn(clippy::zero_prefixed_literal)]` on by default
+help: if you mean to use a decimal constant, remove the `0` to avoid confusion
+    |
+103 -                     [0x4b, 01, 21, a, b, 00, 00, 00] => {
+103 +                     [0x4b, 1, 21, a, b, 00, 00, 00] => {
+    |
+help: if you mean to use an octal constant, use `0o`
+    |
+103 |                     [0x4b, 0o1, 21, a, b, 00, 00, 00] => {
+    |                             +
+
+warning: empty lines after doc comment
+  --> indra_beaglebone/src/pre_charger/pwm.rs:60:1
+   |
+60 | / /// Open the specified entry name as a readable file
+...  |
+84 | |
+   | |_^
+85 |   impl PwmChip {
+   |   - the comment documents this implementation
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#empty_line_after_doc_comments
+   = note: `#[warn(clippy::empty_line_after_doc_comments)]` on by default
+   = help: if the empty lines are unintentional, remove them
+help: if the doc comment should not document the following item then comment it out
+   |
+60 ~ // /// Open the specified entry name as a readable file
+61 | // #[allow(dead_code)]
+...
+69 |
+70 ~ // /// Get the u32 value from the given entry
+   |
+
+warning: redundant field names in struct initialization
+   --> indra_beaglebone/src/pre_charger/pwm.rs:151:13
+    |
+151 |             chip: chip,
+    |             ^^^^^^^^^^ help: replace it with: `chip`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_field_names
+    = note: `#[warn(clippy::redundant_field_names)]` on by default
+
+warning: redundant field names in struct initialization
+   --> indra_beaglebone/src/pre_charger/pwm.rs:152:13
+    |
+152 |             channel: channel,
+    |             ^^^^^^^^^^^^^^^^ help: replace it with: `channel`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_field_names
+
+warning: empty line after doc comment
+   --> indra_beaglebone/src/pre_charger/pwm.rs:196:5
+    |
+196 | /     /// Get the currently configured duty_cycle in nanoseconds
+...   |
+200 | |
+    | |_^
+...
+204 |       fn set_duty_cycle_ns(&self, duty_cycle_ns: u32) -> Result<()> {
+    |       -------------------- the comment documents this function
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#empty_line_after_doc_comments
+    = help: if the empty line is unintentional, remove it
+help: if the doc comment should not document function `set_duty_cycle_ns` then comment it out
+    |
+196 |     // /// Get the currently configured duty_cycle in nanoseconds
+    |     ++
+
+warning: empty line after doc comment
+   --> indra_beaglebone/src/pre_charger/pwm.rs:211:5
+    |
+211 | /     /// Get the currently configured period in nanoseconds
+...   |
+215 | |
+    | |_^
+216 |       /// The period of the PWM signal in Nanoseconds
+217 |       fn set_period_ns(&self) -> Result<()> {
+    |       ---------------- the comment documents this function
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#empty_line_after_doc_comments
+    = help: if the empty line is unintentional, remove it
+help: if the doc comment should not document function `set_period_ns` then comment it out
+    |
+211 |     // /// Get the currently configured period in nanoseconds
+    |     ++
+
+warning: redundant field names in struct initialization
+  --> indra_beaglebone/src/scheduler/mod.rs:70:13
+   |
+70 |             time: time,
+   |             ^^^^^^^^^^ help: replace it with: `time`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_field_names
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/api/mod.rs:118:47
+    |
+118 |     match serde_json::from_str::<Instruction>(&cmd) {
+    |                                               ^^^^ help: change this to: `cmd`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+    = note: `#[warn(clippy::needless_borrow)]` on by default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+  --> indra_beaglebone/src/chademo/ev_connect.rs:60:56
+   |
+60 |         let mut can = tokio_socketcan::CANSocket::open(&"can1").map_err(|_| IndraError::Error)?;
+   |                                                        ^^^^^^^ help: change this to: `"can1"`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:282:35
+    |
+282 |                 update_panel_leds(&led_tx, &chademo).await;
+    |                                   ^^^^^^^ help: change this to: `led_tx`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:282:44
+    |
+282 |                 update_panel_leds(&led_tx, &chademo).await;
+    |                                            ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:295:61
+    |
+295 |             Discharge(d) => match handle_discharge_mode(&d, &chademo).await {
+    |                                                             ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:303:55
+    |
+303 |                 false => match handle_charge_mode(&c, &chademo).await {
+    |                                                       ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:342:31
+    |
+342 |             update_panel_leds(&led_tx, &chademo).await
+    |                               ^^^^^^^ help: change this to: `led_tx`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:342:40
+    |
+342 |             update_panel_leds(&led_tx, &chademo).await
+    |                                        ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:347:31
+    |
+347 |             update_panel_leds(&led_tx, &chademo).await
+    |                               ^^^^^^^ help: change this to: `led_tx`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:347:40
+    |
+347 |             update_panel_leds(&led_tx, &chademo).await
+    |                                        ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: this `if` statement can be collapsed
+   --> indra_beaglebone/src/chademo/ev_connect.rs:468:9
+    |
+468 | /         if (10..=100).contains(chademo.soc()) {
+469 | |             if &old_soc != chademo.soc() {
+470 | |                 old_soc = *chademo.soc();
+471 | |                 log_error!(
+...   |
+478 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#collapsible_if
+    = note: `#[warn(clippy::collapsible_if)]` on by default
+help: collapse nested if block
+    |
+468 ~         if (10..=100).contains(chademo.soc())
+469 ~             && &old_soc != chademo.soc() {
+470 |                 old_soc = *chademo.soc();
+...
+476 |                 );
+477 ~             }
+    |
+
+warning: this multiplication by -1 can be written more succinctly
+   --> indra_beaglebone/src/chademo/ev_connect.rs:532:9
+    |
+532 |         -1.0 * chademo.x200.maximum_discharge_current as f32,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `-(chademo.x200.maximum_discharge_current as f32)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#neg_multiply
+    = note: `#[warn(clippy::neg_multiply)]` on by default
+
+warning: this expression creates a reference which is immediately dereferenced by the compiler
+   --> indra_beaglebone/src/chademo/ev_connect.rs:566:24
+    |
+566 |         w.from_chademo(&chademo);
+    |                        ^^^^^^^^ help: change this to: `chademo`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrow
+
+warning: casting the result of `i16::abs()` to u8
+   --> indra_beaglebone/src/chademo/ev_connect.rs:581:25
+    |
+581 |             let amps = (chademo.output_amps().abs() as u8).min(MAX_AMPS) as u32 * 100;
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `chademo.output_amps().unsigned_abs()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#cast_abs_to_unsigned
+    = note: `#[warn(clippy::cast_abs_to_unsigned)]` on by default
+
+warning: useless conversion to the same type: `chademo_v2::X108`
+   --> indra_beaglebone/src/chademo/state.rs:109:19
+    |
+109 |             x108: X108::new(MAX_AMPS, 500, true, 435).into(),
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider removing `.into()`: `X108::new(MAX_AMPS, 500, true, 435)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#useless_conversion
+    = note: `#[warn(clippy::useless_conversion)]` on by default
+
+warning: casting the result of `i16::abs()` to u8
+   --> indra_beaglebone/src/chademo/state.rs:126:22
+    |
+126 |             true => (self.amps.abs() as u8, 0),
+    |                      ^^^^^^^^^^^^^^^ help: replace with: `self.amps.unsigned_abs()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#cast_abs_to_unsigned
+
+warning: this multiplication by -1 can be written more succinctly
+   --> indra_beaglebone/src/chademo/state.rs:164:49
+    |
+164 |             true => self.set_max_discharge_amps((-1.0 * amps) as u8),
+    |                                                 ^^^^^^^^^^^^^ help: consider using: `-amps`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#neg_multiply
+
+warning: useless conversion to the same type: `bool`
+   --> indra_beaglebone/src/chademo/state.rs:213:9
+    |
+213 |         self.x102.fault().into()
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^ help: consider removing `.into()`: `self.x102.fault()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#useless_conversion
+
+warning: redundant closure
+   --> indra_beaglebone/src/chademo/state.rs:232:22
+    |
+232 |             .map_err(|e| IndraError::PinAccess(e))?
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::PinAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+    = note: `#[warn(clippy::redundant_closure)]` on by default
+
+warning: redundant closure
+   --> indra_beaglebone/src/chademo/state.rs:267:22
+    |
+267 |             .map_err(|e| IndraError::PinAccess(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::PinAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/chademo/state.rs:288:22
+    |
+288 |             .map_err(|e| IndraError::PinAccess(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::PinAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/chademo/state.rs:292:22
+    |
+292 |             .map_err(|e| IndraError::PinAccess(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::PinAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: function call inside of `expect`
+ --> indra_beaglebone/src/data_io/config.rs:9:14
+  |
+9 |             .expect(&format!("Failed to read configuration file:  | {}", config_file));
+  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `unwrap_or_else(|_| panic!("Failed to read configuration file:  | {}", config_file))`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#expect_fun_call
+  = note: `#[warn(clippy::expect_fun_call)]` on by default
+
+warning: enclosing `Ok` and `?` operator are unneeded
+   --> indra_beaglebone/src/data_io/db.rs:192:9
+    |
+192 |         Ok(self.get_records_between_hours(hours_ago, now).await?)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_question_mark
+    = note: `#[warn(clippy::needless_question_mark)]` on by default
+help: remove the enclosing `Ok` and `?` operator
+    |
+192 -         Ok(self.get_records_between_hours(hours_ago, now).await?)
+192 +         self.get_records_between_hours(hours_ago, now).await
+    |
+
+warning: all variants have the same prefix: `Get`
+   --> indra_beaglebone/src/data_io/db.rs:232:1
+    |
+232 | / pub enum Parameters {
+233 | |     GetAllRecords,
+234 | |     GetLastNRecords(usize),
+235 | |     GetRecordsFromHours(i64),
+236 | |     GetRecordsBetween((DateTime<Utc>, DateTime<Utc>)),
+237 | | }
+    | |_^
+    |
+    = help: remove the prefixes and use full paths to the variants instead of glob imports
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#enum_variant_names
+    = note: `#[warn(clippy::enum_variant_names)]` on by default
+
+warning: unneeded `return` statement
+   --> indra_beaglebone/src/data_io/meter.rs:159:9
+    |
+159 |         return Ok(());
+    |         ^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_return
+    = note: `#[warn(clippy::needless_return)]` on by default
+help: remove `return`
+    |
+159 -         return Ok(());
+159 +         Ok(())
+    |
+
+warning: redundant closure
+  --> indra_beaglebone/src/data_io/meter.rs:42:22
+   |
+42 |             .map_err(|e| IndraError::SocketError(e))?;
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::SocketError`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+  --> indra_beaglebone/src/data_io/meter.rs:51:26
+   |
+51 |                 .map_err(|e| IndraError::SocketConnectError(e))?;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::SocketConnectError`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/meter.rs:145:22
+    |
+145 |             .map_err(|e| IndraError::MqttSub(e))?;
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSub`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/meter.rs:152:26
+    |
+152 |                 .map_err(|e| IndraError::MqttSub(e))?;
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSub`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: using `clone` on type `f32` which implements the `Copy` trait
+   --> indra_beaglebone/src/data_io/meter.rs:179:134
+    |
+179 | ...meter_total_power_field.clone(), meter_config.mqtt_meter_total_power_scale.clone(), meter_config   ).await;
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `meter_config.mqtt_meter_total_power_scale`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+    = note: `#[warn(clippy::clone_on_copy)]` on by default
+
+warning: using `clone` on type `f32` which implements the `Copy` trait
+   --> indra_beaglebone/src/data_io/meter.rs:185:134
+    |
+185 | ...meter_phase_power_field.clone(), meter_config.mqtt_meter_phase_power_scale.clone(), meter_config  ).await;
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try removing the `clone` call: `meter_config.mqtt_meter_phase_power_scale`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#clone_on_copy
+
+warning: unneeded `return` statement
+   --> indra_beaglebone/src/data_io/meter.rs:258:13
+    |
+258 |             return;
+    |             ^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_return
+help: remove `return`
+    |
+257 -             update_total_power(scaled_val).await;
+258 -             return;
+257 +             update_total_power(scaled_val).await;
+    |
+
+warning: unneeded `return` statement
+   --> indra_beaglebone/src/data_io/meter.rs:268:13
+    |
+268 |             return;
+    |             ^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_return
+help: remove `return`
+    |
+267 -             update_phase_power(scaled_val).await;
+268 -             return;
+267 +             update_phase_power(scaled_val).await;
+    |
+
+warning: methods called `from_*` usually take no `self`
+  --> indra_beaglebone/src/data_io/mqtt.rs:93:21
+   |
+93 |     pub fn from_pre(&mut self, pre: PreCharger) -> &mut Self {
+   |                     ^^^^^^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+   = note: `#[warn(clippy::wrong_self_convention)]` on by default
+
+warning: methods called `from_*` usually take no `self`
+   --> indra_beaglebone/src/data_io/mqtt.rs:101:25
+    |
+101 |     pub fn from_chademo(&mut self, chademo: &Chademo) -> &mut Self {
+    |                         ^^^^^^^^^
+    |
+    = help: consider choosing a less ambiguous name
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+
+warning: methods called `from_*` usually take no `self`
+   --> indra_beaglebone/src/data_io/mqtt.rs:107:23
+    |
+107 |     pub fn from_meter(&mut self, w: impl Into<f32>, stale: bool) -> &mut Self {                  // from meter.rs
+    |                       ^^^^^^^^^
+    |
+    = help: consider choosing a less ambiguous name
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+
+warning: methods called `from_*` usually take no `self`
+   --> indra_beaglebone/src/data_io/mqtt.rs:114:29
+    |
+114 |     pub fn from_meter_phase(&mut self, val: Option<f32>, stale: bool) -> &mut Self {         // from meter.rs
+    |                             ^^^^^^^^^
+    |
+    = help: consider choosing a less ambiguous name
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+
+warning: useless conversion to the same type: `std::option::Option<f32>`
+   --> indra_beaglebone/src/data_io/mqtt.rs:115:24
+    |
+115 |         self.phase_w = val.into();
+    |                        ^^^^^^^^^^ help: consider removing `.into()`: `val`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#useless_conversion
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/mqtt.rs:175:18
+    |
+175 |         .map_err(|e| IndraError::MqttSub(e))?;
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSub`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/mqtt.rs:181:18
+    |
+181 |         .map_err(|e| IndraError::MqttSub(e))?;
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSub`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/mqtt.rs:187:18
+    |
+187 |         .map_err(|e| IndraError::MqttSub(e))?;
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSub`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/data_io/mqtt.rs:229:30
+    |
+229 |                     .map_err(|e| IndraError::MqttSend(e))
+    |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::MqttSend`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: unneeded `return` statement
+   --> indra_beaglebone/src/data_io/mqtt.rs:362:13
+    |
+362 |             return;
+    |             ^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_return
+help: remove `return`
+    |
+361 -                 });
+362 -             return;
+361 +                 });
+    |
+
+warning: unneeded `return` statement
+   --> indra_beaglebone/src/data_io/mqtt.rs:376:13
+    |
+376 |             return;
+    |             ^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_return
+help: remove `return`
+    |
+375 -             // TODO - Decide if we need to take any immediate action based on this change (e.g. if EV drain protection is enabled while in V2H, maybe force Idle mode for safety)
+376 -             return;
+375 +             // TODO - Decide if we need to take any immediate action based on this change (e.g. if EV drain protection is enabled while in V2H, maybe force Idle mode for safety)
+    |
+
+warning: function call inside of `expect`
+  --> indra_beaglebone/src/data_io/panel.rs:70:18
+   |
+70 |       pin.export().expect(&format!(
+   |  __________________^
+71 | |         "Could not initialise button pin  | {}",
+72 | |         pin.get_pin_num()
+73 | |     ));
+   | |______^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#expect_fun_call
+help: try
+   |
+70 ~     pin.export().unwrap_or_else(|_| panic!("Could not initialise button pin  | {}",
+71 ~         pin.get_pin_num()));
+   |
+
+warning: used a field initializer for a tuple struct
+   --> indra_beaglebone/src/data_io/panel.rs:197:19
+    |
+197 |     let buttons = Buttons { 0: [onoff, boost] };
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: use tuple initialization: `Buttons([onoff, boost])`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#init_numbered_fields
+    = note: `#[warn(clippy::init_numbered_fields)]` on by default
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+   --> indra_beaglebone/src/data_io/panel.rs:343:1
+    |
+343 | impl Into<u8> for State {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+            https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+    = note: `#[warn(clippy::from_over_into)]` on by default
+help: replace the `Into` implementation with `From<data_io::panel::State>`
+    |
+343 ~ impl From<State> for u8 {
+344 ~     fn from(val: State) -> Self {
+345 ~         match val {
+    |
+
+warning: match can be simplified with `.unwrap_or_default()`
+  --> indra_beaglebone/src/global_state/mod.rs:64:9
+   |
+64 | /         match self.eco {
+65 | |             Some(b) => b,
+66 | |             None => false,
+67 | |         }
+   | |_________^ help: replace it with: `self.eco.unwrap_or_default()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#manual_unwrap_or_default
+   = note: `#[warn(clippy::manual_unwrap_or_default)]` on by default
+
+warning: this `impl` can be derived
+  --> indra_beaglebone/src/global_state/mod.rs:82:1
+   |
+82 | / impl Default for ChargeParameters {
+83 | |     fn default() -> Self {
+84 | |         Self {
+85 | |             amps: None,
+...  |
+90 | | }
+   | |_^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#derivable_impls
+   = note: `#[warn(clippy::derivable_impls)]` on by default
+help: replace the manual implementation with a derive attribute
+   |
+29 + #[derive(Default)]
+30 | pub struct ChargeParameters {
+   |
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+  --> indra_beaglebone/src/pre_charger/fans.rs:31:1
+   |
+31 | impl Into<u8> for Duty {
+   | ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+           https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+   = help: replace the `Into` implementation with `From<pre_charger::fans::Duty>`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+
+warning: redundant closure
+  --> indra_beaglebone/src/pre_charger/pre_thread.rs:23:58
+   |
+23 |         tokio_socketcan::CANSocket::open("can0").map_err(|e| IndraError::CanOpen(e))?;
+   |                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::CanOpen`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+  --> indra_beaglebone/src/pre_charger/pre_thread.rs:66:30
+   |
+66 |                     .map_err(|e| IndraError::PinAccess(e))?;
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::PinAccess`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: the borrowed expression implements the required traits
+  --> indra_beaglebone/src/pre_charger/pwm.rs:88:22
+   |
+88 |         fs::metadata(&format!("/sys/class/pwm/pwmchip{}", number))?;
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: change this to: `format!("/sys/class/pwm/pwmchip{}", number)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrows_for_generic_args
+   = note: `#[warn(clippy::needless_borrows_for_generic_args)]` on by default
+
+warning: redundant pattern matching, consider using `is_err()`
+   --> indra_beaglebone/src/pre_charger/pwm.rs:116:16
+    |
+116 |         if let Err(_) = fs::metadata(&format!(
+    |                ^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_pattern_matching
+    = note: `#[warn(clippy::redundant_pattern_matching)]` on by default
+help: try
+    |
+116 ~         if fs::metadata(&format!(
+117 +             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+118 +             self.pwm_id, self.pwm_id, channel
+119 ~         )).is_err() {
+    |
+
+warning: the borrowed expression implements the required traits
+   --> indra_beaglebone/src/pre_charger/pwm.rs:116:38
+    |
+116 |           if let Err(_) = fs::metadata(&format!(
+    |  ______________________________________^
+117 | |             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+118 | |             self.pwm_id, self.pwm_id, channel
+119 | |         )) {
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrows_for_generic_args
+help: change this to
+    |
+116 ~         if let Err(_) = fs::metadata(format!(
+117 +             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+118 +             self.pwm_id, self.pwm_id, channel
+119 ~         )) {
+    |
+
+warning: redundant pattern matching, consider using `is_ok()`
+   --> indra_beaglebone/src/pre_charger/pwm.rs:129:16
+    |
+129 |         if let Ok(_) = fs::metadata(&format!(
+    |                ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_pattern_matching
+help: try
+    |
+129 ~         if fs::metadata(&format!(
+130 +             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+131 +             self.pwm_id, self.pwm_id, channel
+132 ~         )).is_ok() {
+    |
+
+warning: the borrowed expression implements the required traits
+   --> indra_beaglebone/src/pre_charger/pwm.rs:129:37
+    |
+129 |           if let Ok(_) = fs::metadata(&format!(
+    |  _____________________________________^
+130 | |             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+131 | |             self.pwm_id, self.pwm_id, channel
+132 | |         )) {
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#needless_borrows_for_generic_args
+help: change this to
+    |
+129 ~         if let Ok(_) = fs::metadata(format!(
+130 +             "/sys/class/pwm/pwmchip{}/pwm-{}:{}",
+131 +             self.pwm_id, self.pwm_id, channel
+132 ~         )) {
+    |
+
+warning: methods called `from_*` usually take no `self`
+  --> indra_beaglebone/src/pre_charger/mod.rs:99:23
+   |
+99 |     pub fn from_slice(&mut self, s: &[u8]) -> Result<(), IndraError> {
+   |                       ^^^^^^^^^
+   |
+   = help: consider choosing a less ambiguous name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+
+warning: methods with the following characteristics: (`to_*` and `self` type is `Copy`) usually take `self` by value
+   --> indra_beaglebone/src/pre_charger/mod.rs:240:19
+    |
+240 |     pub fn to_can(&self) -> CANFrame {
+    |                   ^^^^^
+    |
+    = help: consider choosing a less ambiguous name
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#wrong_self_convention
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+   --> indra_beaglebone/src/pre_charger/mod.rs:273:1
+    |
+273 | impl Into<u8> for Command {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: `impl From<Local> for Foreign` is allowed by the orphan rules, for more information see
+            https://doc.rust-lang.org/reference/items/implementations.html#trait-implementation-coherence
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+help: replace the `Into` implementation with `From<pre_charger::Command>`
+    |
+273 ~ impl From<Command> for u8 {
+274 ~     fn from(val: Command) -> Self {
+275 |         use Command::*;
+276 ~         match val {
+    |
+
+warning: an implementation of `From` is preferred since it gives you `Into<_>` for free where the reverse isn't true
+  --> indra_beaglebone/src/scheduler/mod.rs:37:1
+   |
+37 | impl Into<OperationMode> for Event {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#from_over_into
+help: replace the `Into` implementation with `From<scheduler::Event>`
+   |
+37 ~ impl From<Event> for OperationMode {
+38 ~     fn from(val: Event) -> Self {
+39 |         use OperationMode::*;
+40 |
+41 ~         match val.action {
+42 |             Action::Charge => {
+43 ~                 Charge(val.params.unwrap_or_default())
+44 |             }
+45 |
+46 |             Action::Discharge => {
+47 ~                 Charge(val.params.unwrap_or_default())
+   |
+
+warning: calls to `push` immediately after creation
+  --> indra_beaglebone/src/scheduler/mod.rs:87:5
+   |
+87 | /     let mut events: Vec<Event> = vec![];
+88 | |     events.push(Event::new(1, 2, 3));
+89 | |     events.push(Event::new(2, 3, 3));
+   | |_____________________________________^ help: consider using the `vec![]` macro: `let events: Vec<Event> = vec![..];`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#vec_init_then_push
+   = note: `#[warn(clippy::vec_init_then_push)]` on by default
+
+warning: useless conversion to the same type: `scheduler::Events`
+  --> indra_beaglebone/src/scheduler/mod.rs:97:30
+   |
+97 |       let mut events: Events = get_eventfile()
+   |  ______________________________^
+98 | |         .await
+99 | |         .try_into()
+   | |___________________^
+   |
+   = help: consider removing `.try_into()`
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#useless_conversion
+
+warning: redundant closure
+   --> indra_beaglebone/src/scheduler/mod.rs:180:60
+    |
+180 |     let json_data = serde_json::to_string(&events).map_err(|e| IndraError::Serialise(e))?;
+    |                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::Serialise`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/scheduler/mod.rs:184:18
+    |
+184 |         .map_err(|e| IndraError::FileAccess(e))?;
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::FileAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/scheduler/mod.rs:188:60
+    |
+188 |     let json_data = serde_json::to_string(&events).map_err(|e| IndraError::Serialise(e))?;
+    |                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::Serialise`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+   --> indra_beaglebone/src/scheduler/mod.rs:190:52
+    |
+190 |     std::fs::write(EVENT_FILE, &json_data).map_err(|e| IndraError::FileAccess(e))?;
+    |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the tuple variant itself: `IndraError::FileAccess`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+warning: redundant closure
+  --> indra_beaglebone/src/main.rs:52:14
+   |
+52 |         .map(|t| chrono::DateTime::<chrono::Local>::from(t))
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace the closure with the associated function itself: `chrono::DateTime::<chrono::Local>::from`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#redundant_closure
+
+error: this loop never actually loops
+   --> indra_beaglebone/src/main.rs:108:9
+    |
+108 | /         loop {
+109 | |             ctrl_c.recv().await;
+110 | |             log::warn!("CTRL-C caught - sending Quit instruction");
+111 | |             let _ = eb.send(OperationMode::Quit).await;
+...   |
+114 | |             std::process::exit(1)
+115 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#never_loop
+    = note: `#[deny(clippy::never_loop)]` on by default
+
+warning: deref on an immutable reference
+   --> indra_beaglebone/src/main.rs:121:22
+    |
+121 |         .map_err(|_| &*"ev100ms thread died")
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^ help: if you would like to reborrow, try removing `&*`: `"ev100ms thread died"`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#borrow_deref_ref
+    = note: `#[warn(clippy::borrow_deref_ref)]` on by default
+
+warning: `indra_beaglebone` (bin "indra_beaglebone") generated 77 warnings
+error: could not compile `indra_beaglebone` (bin "indra_beaglebone") due to 1 previous error; 77 warnings emitted

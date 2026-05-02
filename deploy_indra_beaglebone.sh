@@ -5,7 +5,7 @@ BINARY="indra_beaglebone"
 REMOTE_USER="unit"
 REMOTE_IP="192.168.10.101"
 REMOTE_PATH="/home/unit/bin"
-SERVICE="indra-beaglebone.service"
+SERVICE="indra_beaglebone.service"
 
 echo "========================================"
 echo "📤 Deploying to BeagleBone (${REMOTE_IP})"
