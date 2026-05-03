@@ -37,8 +37,8 @@ pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
     loop {
         counter += 1;
         let instant = Instant::now();
-        let cmd_list = if counter % 2 == 0 { setpoints } else { outputs };
-        read_pre(&cmd_list, &mut can_socket, t100ms, &mut pre).await;
+        let cmd_list: &[u16] = if counter % 2 == 0 { &setpoints } else { &outputs };
+        read_pre(cmd_list, &mut can_socket, t100ms, &mut pre).await;
         update_fan(&mut pre, &mut fan);
 
         if let Ok(cmd) = pre_rx.try_recv() {

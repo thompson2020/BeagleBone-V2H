@@ -1,22 +1,14 @@
 use super::config::MeterConfig;
-use crate::error::IndraError;
-use std::{net::SocketAddr, sync::Arc};
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::RwLock;
-use tokio::time::timeout;
-use tokio::time::Instant;
-use tokio::{
-    net::TcpStream,
-    sync::Mutex,
-    time::{sleep, Duration},
-};
-// MQTT Meter additions
-use serde_json::Value;
+use crate::{error::IndraError, global_state::OperationMode, statics::ChademoTx};
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
-
-use crate::global_state::OperationMode;
-use crate::statics::ChademoTx;
+use serde_json::Value;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::RwLock,
+    time::{sleep, timeout, Duration, Instant},
+};
 
 
 #[derive(Clone, Copy, Default)]
@@ -160,9 +152,10 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
                         }
                     }
                 }
-                Ok(event) => {
-                    handle_mqtt_meter_event(event, &meter_config).await;
+                Ok(Event::Incoming(Incoming::Publish(msg))) => {
+                    handle_publish(msg, &meter_config).await;
                 }
+                Ok(_) => {}
                 Err(e) => {
                     // Connection dropped — rumqttc will reconnect automatically.
                     // Log it so disconnects are visible, then keep polling.
@@ -174,150 +167,74 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
 
 }
 
-async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &MeterConfig) {
-    use rumqttc::Event::*;
-
-    match mqtt_event {
-        Incoming(mqtt_in) => {
-            if let rumqttc::Packet::Publish(msg) = mqtt_in {
-                //if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
-                let payload_str = String::from_utf8_lossy(&msg.payload);
-                let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
-                let readable_payload = clean_payload .replace(",", ", ").replace(":", ": ");
-                log::debug!("MQTT Meter: Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
-
-                // If it's our total meter topic, pass raw payload to meter.rs
-                if msg.topic == meter_config.mqtt_meter_total_power_topic {
-                    log::debug!("MQTT Meter: message from topic: meter total (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_total_power_field);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_total_power_field.clone(), meter_config.mqtt_meter_total_power_scale.clone(), meter_config   ).await;
-                }
-
-                // If it's our phase meter topic, pass raw payload to meter.rs
-                if msg.topic == meter_config.mqtt_meter_phase_power_topic {
-                    log::debug!("MQTT Meter: message from topic: meter phase (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_phase_power_field);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_phase_power_field.clone(), meter_config.mqtt_meter_phase_power_scale.clone(), meter_config  ).await;
-                }
-                
-            }
-        }
-        Outgoing(_) => {
-            // ignore MQTT acks / publishes from client
-        }
-       
+/// Extract a watt value from either a plain number ("1234.5") or a JSON payload
+/// with a dotted field path ("sensor.power.total").  Returns None and logs a
+/// warning if the payload cannot be parsed or the path is missing.
+fn extract_value(payload: &str, field: &str) -> Option<f32> {
+    if let Ok(v) = payload.parse::<f32>() {
+        log::debug!("MQTT Meter: plain number | {:.2}", v);
+        return Some(v);
     }
-}
-
-
-pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String, scale: f32, meter_config: &MeterConfig) {
-    let payload_trim = payload.trim();
-
-    // Now update the correct value
-    log::debug!("MQTT Meter: Extracting topic & field: | {} , {}", topic, mqtt_field );
-
-    // Case 1: Plain number
-    let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
-        log::debug!("MQTT Meter: value extracted(plain number): | {:.2} W", val);
-        val
-    } 
-    // Case 2: JSON object
-    else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
-        let mut current = &json;
-        for key in mqtt_field.split('.') {
-            current = match current.get(key) {
+    if let Ok(json) = serde_json::from_str::<Value>(payload) {
+        let mut cur = &json;
+        for key in field.split('.') {
+            cur = match cur.get(key) {
                 Some(v) => v,
                 None => {
-                    log::warn!("MQTT Meter: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
-                    return;
+                    log::warn!("MQTT Meter: JSON path '{}' not found | payload: {}", field, payload);
+                    return None;
                 }
             };
         }
-
-        match current.as_f64() {
-            Some(v) => {
-                let val = v as f32;
-                log::debug!("MQTT Meter: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
-                val
-            }
-            None => {
-                log::warn!("MQTT Meter: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
-                return;
-            }
+        if let Some(v) = cur.as_f64() {
+            log::debug!("MQTT Meter: JSON field '{}' | {:.2}", field, v);
+            return Some(v as f32);
         }
-    } 
-    else {
-        log::warn!("MQTT Meter: failed to parse as number or JSON | payload: {}", payload_trim);
-        return;
-    };
-
-    let scaled_val = val * scale;
-    if scale != 1.0 {
-        log::debug!("MQTT Meter: scaled value by {} | {:.2}", scale, scaled_val);
+        log::warn!("MQTT Meter: JSON field '{}' is not a number | payload: {}", field, payload);
+        return None;
     }
+    log::warn!("MQTT Meter: payload is not a number or JSON | {}", payload);
+    None
+}
 
-    
-    
-    
-    match (topic.as_str(), mqtt_field.as_str()) {
+/// Handle a single MQTT Publish message.  Checks the topic against the
+/// configured total and phase topics — both `if` blocks can fire on the same
+/// message when total and phase share a topic but use different fields.
+async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig) {
+    let payload = String::from_utf8_lossy(&msg.payload);
+    let payload = payload.trim().replace(['\n', '\r'], "");
+    log::debug!("MQTT Meter: publish | topic: '{}' payload: '{}'", msg.topic, payload);
 
-        // ===================== TOTAL POWER =====================
-        (t, f)
-            if t == meter_config.mqtt_meter_total_power_topic
-            && f == meter_config.mqtt_meter_total_power_field =>
-        {
-            log::debug!("MQTT Meter: calling update_total_power | {}", scaled_val);
-            update_total_power(scaled_val).await;
-            return;
-        }
-
-        // ===================== PHASE POWER =====================
-        (t, f)
-            if t == meter_config.mqtt_meter_phase_power_topic
-            && f == meter_config.mqtt_meter_phase_power_field =>
-        {
-            log::debug!("MQTT Meter: calling update_phase_power | {}", scaled_val);
-            update_phase_power(scaled_val).await;
-            return;
-        }
-
-
-
-        // ===================== UNKNOWN =====================
-        _ => {
-            log::warn!("MQTT Meter: unknown topic/field | {} / {}", topic, mqtt_field);
+    if msg.topic == cfg.mqtt_meter_total_power_topic {
+        if let Some(v) = extract_value(&payload, &cfg.mqtt_meter_total_power_field) {
+            let scaled = v * cfg.mqtt_meter_total_power_scale;
+            let mut m = METER.write().await;
+            m.total_w = Some(scaled);
+            m.last_total_update = Some(Instant::now());
+            log::debug!("MQTT Meter: total power | {:.2} W", scaled);
         }
     }
 
-
-
+    if msg.topic == cfg.mqtt_meter_phase_power_topic {
+        if let Some(v) = extract_value(&payload, &cfg.mqtt_meter_phase_power_field) {
+            let scaled = v * cfg.mqtt_meter_phase_power_scale;
+            let mut m = METER.write().await;
+            m.phase_w = Some(scaled);
+            m.last_phase_update = Some(Instant::now());
+            log::debug!("MQTT Meter: phase power | {:.2} W", scaled);
+        }
+    }
 }
 
 
 
 
 
-
-
-
-// MQTT update events
-pub async fn update_total_power(val: f32) {
-    {
-        let mut meter = METER.write().await;
-        meter.total_w = Some(val);
-        meter.last_total_update = Some(Instant::now());
-    }
-    log::debug!("MQTT Meter: updated: total power | {:.2} W", val);
-}
-pub async fn mark_total_power_as_stale() {
+async fn mark_total_power_as_stale() {
     METER.write().await.total_w = None;
     log::error!("MQTT Meter: updated: total power is STALE → treating as offline");
 }
-pub async fn update_phase_power(val: f32) {
-    let mut meter = METER.write().await;
-    meter.phase_w = Some(val);
-    meter.last_phase_update = Some(Instant::now());
-    log::debug!("MQTT Meter: updated: phase power | {:.2} W", val);
-}
-pub async fn mark_phase_power_as_stale() {
+async fn mark_phase_power_as_stale() {
     METER.write().await.phase_w = None;
     log::error!("MQTT Meter: updated: phase power to stale (treating as offline) | Stale ");
 }
@@ -330,73 +247,47 @@ pub async fn mark_phase_power_as_stale() {
 
 
 
+/// Returns true if `last` is older than `timeout_seconds` (or was never set).
+/// Logs at debug/warn level so the caller just acts on the bool.
+fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
+    match last {
+        Some(t) => {
+            let age = t.elapsed().as_secs();
+            if age > timeout_seconds {
+                log::warn!("Meter staleness: {} STALE ({}s > {}s)", label, age, timeout_seconds);
+                true
+            } else {
+                log::debug!("Meter staleness: {} fresh ({}s)", label, age);
+                false
+            }
+        }
+        None => {
+            log::warn!("Meter staleness: {} never received data", label);
+            false // no data yet — nothing to mark stale
+        }
+    }
+}
+
 // Background task to check if any MQTT Meter data is stale
-pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: ChademoTx) {
+async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: ChademoTx) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
-        let timeout_seconds = meter_config.mqtt_meter_timeout_seconds;
+        let timeout = meter_config.mqtt_meter_timeout_seconds;
+        let snapshot = *METER.read().await;
 
-        log::debug!("Meter Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
-
-        let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
-        let meter_snapshot = *METER.read().await;
-
-
-       // Check total power staleness
-        {
-            log::debug!("Meter Staleness check: Starting total power check");
-
-            if let Some(last_update) = meter_snapshot.last_total_update {
-                log::debug!("Meter Staleness check: last_total_power_update found");
-
-                let age = last_update.elapsed().as_secs();
-                log::debug!("Meter Staleness check: total power age = {} seconds", age);
-
-                if age > timeout_seconds {
-                    log::warn!("Meter Staleness check:  total power data is STALE (age = {}s > {}s timeout)", 
-                            age, timeout_seconds);
-
-                    // Safety: Only force Idle if currently in V2H
-                    if current_mode == OperationMode::V2h {
-                        log::warn!("Meter Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
-                        let _ = mode_tx.send(OperationMode::Idle).await;
-                    } else {
-                        log::info!("Meter Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)",
-                                   current_mode);
-                    }
-                    log::debug!("Meter Staleness check: mark_total_power_as_stale()");
-                    crate::meter::mark_total_power_as_stale().await;
-                } else {
-                    log::debug!("Meter Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }
-            } else {
-                log::warn!("Meter Staleness check: No last_total_power_update timestamp found (never received data?)");
+        if is_stale(snapshot.last_total_update, timeout, "total power") {
+            let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
+            if current_mode == OperationMode::V2h {
+                log::warn!("Meter staleness: total power stale + V2H active → forcing Idle");
+                let _ = mode_tx.send(OperationMode::Idle).await;
             }
-
-            log::debug!("Meter Staleness check: Finished total power check");
+            mark_total_power_as_stale().await;
         }
 
-
-
-
-      // Check phase power staleness
-        {
-            //let data = CHADEMO_DATA.read().await;
-            log::debug!("Meter Staleness check: Starting phase power staleness check");            
-            if let Some(last_update) = meter_snapshot.last_phase_update {
-                let age = last_update.elapsed().as_secs();
-                if age > timeout_seconds {
-                    log::warn!("Meter Staleness check: phase power data is stale (age = {}s)", age);
-                    crate::meter::mark_phase_power_as_stale().await;
-                } else {
-                    log::debug!("Meter Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }   
-            } else {
-                log::warn!("Meter Staleness check: No last_phase_power_update timestamp found (never received data?)");
-            }   
+        if is_stale(snapshot.last_phase_update, timeout, "phase power") {
+            mark_phase_power_as_stale().await;
         }
-
     }
 }
 

@@ -14,7 +14,7 @@ lazy_static::lazy_static! {
 pub const BB_PWM_CHIP: u32 = 0;
 pub const BB_PWM_NUMBER: u32 = 0;
 
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug, serde::Serialize)]
 pub enum PreState {
     #[default]
     Offline,
@@ -173,6 +173,18 @@ impl PreCharger {
         let range = self.get_dc_setpoint_volts() - 2.0..=self.get_dc_setpoint_volts() + 2.0;
         range.contains(&self.get_dc_output_volts())
     }
+    pub fn dc_power(&self) -> f32 {
+        self.dc_output_amps * self.dc_output_volts
+    }
+    pub fn get_ac_volts(&self) -> f32 {
+        self.ac_volts
+    }
+    pub fn get_ac_amps(&self) -> f32 {
+        self.ac_amps
+    }
+    pub fn get_dc_bus_volts(&self) -> f32 {
+        self.dc_bus_volts
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -313,9 +325,10 @@ pub fn cmd_list_setpoints() -> [u16; 5] {
         u16::from(Register::Ping),
     ]
 }
-pub fn cmd_list_outputs() -> [u16; 5] {
+pub fn cmd_list_outputs() -> [u16; 6] {
     [
         u16::from(Register::Temp),
+        u16::from(Register::AcV),
         u16::from(Register::AcA),
         u16::from(Register::DcOutputV),
         // u16::from(Register::DcBusV),

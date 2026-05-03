@@ -1,47 +1,10 @@
-use crate::error::IndraError;
-use crate::global_state::OperationMode;
-use crate::log_error;
-
-use lazy_static::lazy_static;
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::Instant;
-use tokio::sync::RwLock;
-use tokio::time::sleep;
+use crate::{error::IndraError, global_state::{ChargeParameters, OperationMode}, log_error, statics::ChademoTx};
 use chrono::Timelike;
-
+use std::sync::Arc;
+use std::time::Instant;
 use super::config::MqttConfig;
-
-use crate::statics::ChademoTx;
-use crate::global_state::ChargeParameters;
-
-
-// Supervisory commands received from Home Assistant (smart_charge, ev_drain_protection).
-#[derive(Clone, Copy, Default)]
-pub struct SupervisoryState {
-    pub smart_charge: bool,
-    pub ev_drain_protection: bool,
-    pub smart_charge_update: Option<Instant>,
-    pub ev_drain_protection_update: Option<Instant>,
-}
-impl SupervisoryState {
-    pub fn update_smart_charge(&mut self, enabled: bool, stale: bool) {
-        self.smart_charge = enabled;
-        if !stale {
-            self.smart_charge_update = Some(Instant::now());
-        }
-    }
-    pub fn update_ev_drain_protection(&mut self, enabled: bool, stale: bool) {
-        self.ev_drain_protection = enabled;
-        if !stale {
-            self.ev_drain_protection_update = Some(Instant::now());
-        }
-    }
-}
-lazy_static! {
-    pub static ref SUPERVISORY: Arc<RwLock<SupervisoryState>> =
-        Arc::new(RwLock::new(SupervisoryState::default()));
-}
+use super::supervisor::SUPERVISORY;
+use tokio::time::{sleep, Duration};
 
 static HANDLE_SMART_CHARGE_CHANGE_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 struct SmartChargeRunningGuard;
@@ -100,7 +63,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
                         .subscribe(&mqtt_config_clone.mqtt_smart_charge_topic, QoS::AtMostOnce)
                         .await
                     {
-                        log::error!("MQTT: failed to subscribe to smart charge topic | {e:?}");
+                        log::error!("MQTT: failed to subscribe to smart_charge topic | {e:?}");
                     } else {
                         log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_smart_charge_topic);
                     }
@@ -108,14 +71,23 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
                         .subscribe(&mqtt_config_clone.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
                         .await
                     {
-                        log::error!("MQTT: failed to subscribe to ev drain protection topic | {e:?}");
+                        log::error!("MQTT: failed to subscribe to ev_drain_protection topic | {e:?}");
                     } else {
                         log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_ev_drain_protection_topic);
                     }
+                    if let Err(e) = client_for_reconnect
+                        .subscribe(&mqtt_config_clone.mqtt_smart_export_topic, QoS::AtMostOnce)
+                        .await
+                    {
+                        log::error!("MQTT: failed to subscribe to smart_export topic | {e:?}");
+                    } else {
+                        log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_smart_export_topic);
+                    }
                 }
-                Ok(event) => {
-                    handle_mqtt_event(event, &mqtt_config_clone, mode_tx_for_eventloop.clone()).await;
+                Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg))) => {
+                    handle_publish(msg, &mqtt_config_clone, mode_tx_for_eventloop.clone()).await;
                 }
+                Ok(_) => {}
                 Err(e) => {
                     // Connection dropped — rumqttc will reconnect automatically.
                     // Log it so disconnects are visible, then keep polling.
@@ -168,154 +140,83 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
     }
 }
 
-async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig, mode_tx: ChademoTx) {
-    use rumqttc::Event::*;
-
-    match mqtt_event {
-        Incoming(mqtt_in) => {
-            if let rumqttc::Packet::Publish(msg) = mqtt_in {
-                //if let Ok(payload) = String::from_utf8(msg.payload.to_vec()) {
-                let payload_str = String::from_utf8_lossy(&msg.payload);
-                let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
-                let readable_payload = clean_payload .replace(",", ", ").replace(":", ": ");
-                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
-
-                // Check if this is a command from the web GUI
-                if msg.topic == mqtt_config.sub {
-                    log::warn!("MQTT : command received via MQTT on - not implemented yet ' | {}'", msg.topic);
-                    // use rumqttc::Packet::*;
-                    // log::debug!("Incoming {:?}", mqtt_in);
-                    // if let Publish(msg) = mqtt_in {
-                    //     *CARDATA.lock().await = match serde_json::from_slice::<Data>(&msg.payload) {
-                    //         Ok(json) => json.inner,
-                    //         Err(e) => {
-                    //             log::error!("{e:?}");
-                    //             return ControlFlow::Break(());
-                    //         }
-                    //     };
-                    // }
-                }
-
-
-                // If it's our smart_charge_topic, then handle the smart charge command
-                if msg.topic == mqtt_config.mqtt_smart_charge_topic {
-                    log::debug!("MQTT message from topic: smart charge | {}", msg.topic);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_smart_charge_field.clone(), 1.0, mqtt_config, &mode_tx  ).await;
-                }
-
-                // If it's our ev_drain_protection_topic, then handle the ev drain protection command
-                if msg.topic == mqtt_config.mqtt_ev_drain_protection_topic {
-                    log::debug!("MQTT message from topic:  ev drain protection | {}", msg.topic);
-                    update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_ev_drain_protection_field.clone(), 1.0, mqtt_config, &mode_tx  ).await;
-                }
-                
-            }
-        }
-        
-        Outgoing(_mqtt_out) => {
-            // log::debug!("Outgoing {:?}", mqtt_out);
-        }
+/// Extract a value from either a plain number ("1") or a JSON payload with a
+/// dotted field path ("state.value").  Returns None and logs a warning on failure.
+fn extract_value(payload: &str, field: &str) -> Option<f32> {
+    use serde_json::Value;
+    if let Ok(v) = payload.parse::<f32>() {
+        log::debug!("MQTT: plain number | {:.2}", v);
+        return Some(v);
     }
-}
-
-
-pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String, scale: f32, mqtt_config: &MqttConfig, mode_tx: &ChademoTx) {
-    let payload_trim = payload.trim();
-
-    // Now update the correct value
-    log::debug!("MQTT: Extracting topic & field: | {} , {}", topic, mqtt_field );
-
-    // Case 1: Plain number
-    let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
-        log::debug!("MQTT: value extracted(plain number): | {:.2} W", val);
-        val
-    } 
-    // Case 2: JSON object
-    else if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload_trim) {
-        let mut current = &json;
-        for key in mqtt_field.split('.') {
-            current = match current.get(key) {
+    if let Ok(json) = serde_json::from_str::<Value>(payload) {
+        let mut cur = &json;
+        for key in field.split('.') {
+            cur = match cur.get(key) {
                 Some(v) => v,
                 None => {
-                    log::warn!("MQTT: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
-                    return;
+                    log::warn!("MQTT: JSON path '{}' not found | payload: {}", field, payload);
+                    return None;
                 }
             };
         }
-
-        match current.as_f64() {
-            Some(v) => {
-                let val = v as f32;
-                log::debug!("MQTT: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
-                val
-            }
-            None => {
-                log::warn!("MQTT: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
-                return;
-            }
+        if let Some(v) = cur.as_f64() {
+            log::debug!("MQTT: JSON field '{}' | {:.2}", field, v);
+            return Some(v as f32);
         }
-    } 
-    else {
-        log::warn!("MQTT: failed to parse as number or JSON | payload: {}", payload_trim);
-        return;
-    };
-
-    let scaled_val = val * scale;
-    if scale != 1.0 {
-        log::debug!("MQTT: scaled value by {} | {:.2}", scale, scaled_val);
+        log::warn!("MQTT: JSON field '{}' is not a number | payload: {}", field, payload);
+        return None;
     }
-
-    
-    
-    
-    match (topic.as_str(), mqtt_field.as_str()) {
-
-        // ===================== SMART CHARGE =====================
-        (t, f)
-            if t == mqtt_config.mqtt_smart_charge_topic
-            && f == mqtt_config.mqtt_smart_charge_field =>
-        {
-            log::debug!("MQTT: updating smart charge | {}", scaled_val);
-
-            let enabled = scaled_val > 0.0;
-
-            SUPERVISORY.write().await.update_smart_charge(enabled, false);
-
-            log::debug!("MQTT: calling handle_smart_charge_change | {}", scaled_val);
-            let mode_tx = mode_tx.clone();
-                tokio::spawn(async move {
-                    handle_smart_charge_change(enabled, &mode_tx).await;
-                });
-            return;
-        }
-
-        // ===================== EV PROTECTION =====================
-        (t, f)
-            if t == mqtt_config.mqtt_ev_drain_protection_topic
-            && f == mqtt_config.mqtt_ev_drain_protection_field =>
-        {
-            log::debug!("MQTT: updating ev drain protection | {}", scaled_val);
-
-            SUPERVISORY.write().await.update_ev_drain_protection(scaled_val > 0.0, false);
-
-            // TODO - Decide if we need to take any immediate action based on this change (e.g. if EV drain protection is enabled while in V2H, maybe force Idle mode for safety)
-            return;
-        }
-
-        // ===================== UNKNOWN =====================
-        _ => {
-            log::warn!("MQTT: unknown topic/field | {} / {}", topic, mqtt_field);
-        }
-    }
-
-
-
+    log::warn!("MQTT: payload is not a number or JSON | {}", payload);
+    None
 }
+
+/// Handle a single MQTT Publish message.
+/// handle_smart_charge_change is spawned so the event loop is not blocked by its sleeps.
+async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, mode_tx: ChademoTx) {
+    let payload = String::from_utf8_lossy(&msg.payload);
+    let payload = payload.trim().replace(['\n', '\r'], "");
+    log::debug!("MQTT: publish | topic: '{}' payload: '{}'", msg.topic, payload);
+
+    if msg.topic == cfg.sub {
+        log::warn!("MQTT: command topic not yet implemented | {}", msg.topic);
+    }
+
+    if msg.topic == cfg.mqtt_smart_charge_topic {
+        if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_charge_field) {
+            let enabled = v > 0.0;
+            SUPERVISORY.write().await.update_smart_charge_request(enabled, false);
+            log::debug!("MQTT: smart_charge_request → {}", enabled);
+            let tx = mode_tx.clone();
+            tokio::spawn(async move {
+                handle_smart_charge_change(enabled, &tx).await;
+            });
+        }
+    }
+
+    if msg.topic == cfg.mqtt_ev_drain_protection_topic {
+        if let Some(v) = extract_value(&payload, &cfg.mqtt_ev_drain_protection_field) {
+            let enabled = v > 0.0;
+            SUPERVISORY.write().await.update_ev_drain_protection_request(enabled, false);
+            log::debug!("MQTT: ev_drain_protection_request → {}", enabled);
+        }
+    }
+
+    if msg.topic == cfg.mqtt_smart_export_topic {
+        if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_field) {
+            let enabled = v > 0.0;
+            SUPERVISORY.write().await.update_smart_export_request(enabled, false);
+            log::debug!("MQTT: smart_export_request → {}", enabled);
+        }
+    }
+}
+
+
+
 
 
 // Handles smart charge activation from Octopus IOG slots
 // Uses soft start/stop to avoid sudden 0 <-> 6.4kW reversal
-pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
+async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
   
     if HANDLE_SMART_CHARGE_CHANGE_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
         log::warn!("Smart Charge: Received but already running - ignoring new trigger");
@@ -367,14 +268,9 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         //Check -  SoC > Target  - ignore smart charge -> Immediate go to Idle
         if current_soc >= requested_soc {
             log::info!("Smart Charge->true - SoC > Request - GOING TO IDLE (SoC {:.1}% >= target {:.1}%)", current_soc, requested_soc);
-            let mode = OperationMode::Idle;
-            log::debug!("Smart Charge mode created | {:?}", mode);
-            let tx = mode_tx.clone();
-            tokio::spawn(async move {
-                if let Err(e) = tx.send(mode).await {
-                    log::error!("MQTT failed to send mode: {:?}", e);
-                }
-            });
+            if let Err(e) = mode_tx.send(OperationMode::Idle).await {
+                log::error!("MQTT: failed to send mode: {:?}", e);
+            }
             log::info!("Smart Charge SWITCHED TO Idle");
             return;
         }
@@ -386,14 +282,9 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         let mut params = ChargeParameters::default();
         params.set_amps(1);
         params.set_soc_limit(requested_soc as u8);
-        let mode = OperationMode::Charge(params);
-        log::debug!("Smart Charge mode created | {:?}", mode);
-        let tx = mode_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tx.send(mode).await {
-                log::error!("MQTT failed to send mode: {:?}", e);
-            }
-        });
+        if let Err(e) = mode_tx.send(OperationMode::Charge(params)).await {
+            log::error!("MQTT: failed to send mode: {:?}", e);
+        }
         
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
@@ -407,14 +298,9 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         let mut params = ChargeParameters::default();
         params.set_amps(16);
         params.set_soc_limit(requested_soc as u8);
-        let mode = OperationMode::Charge(params);
-        log::debug!("Smart Charge mode created | {:?}", mode);
-        let tx = mode_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tx.send(mode).await {
-                log::error!("MQTT failed to send mode: {:?}", e);
-            }
-        });
+        if let Err(e) = mode_tx.send(OperationMode::Charge(params)).await {
+            log::error!("MQTT: failed to send mode: {:?}", e);
+        }
         
         // TODO: Consider smoother ramp (e.g. 1A → 4A → 8A → 16A over time)
 
@@ -438,14 +324,9 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
         let mut params = ChargeParameters::default();
         params.set_amps(1);
         params.set_soc_limit(requested_soc as u8);
-        let mode = OperationMode::Charge(params);
-        log::debug!("Smart Charge mode created | {:?}", mode);
-        let tx = mode_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tx.send(mode).await {
-                log::error!("MQTT failed to send mode: {:?}", e);
-            }
-        });
+        if let Err(e) = mode_tx.send(OperationMode::Charge(params)).await {
+            log::error!("MQTT: failed to send mode: {:?}", e);
+        }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
@@ -454,16 +335,10 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
             return;
         }
         log::info!("Smart Charge->false - soft stop complete - returning to V2H");
-        let mode = OperationMode::V2h;
-        log::debug!("Smart Charge mode created | {:?}", mode);
-        let tx = mode_tx.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tx.send(mode).await {
-                log::error!("MQTT failed to send mode: {:?}", e);
-            }
-        });
+        if let Err(e) = mode_tx.send(OperationMode::V2h).await {
+            log::error!("MQTT: failed to send mode: {:?}", e);
+        }
         log::info!("Smart Charge SWITCHED TO V2H");
-        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;  // we dont need to spawn the tx.send as this is async - but bodge to ensure the mode change is sent before task exits 
 
     }
 }
@@ -489,53 +364,44 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
 
 
 
-// Background task to check if any MQTT data is stale
-pub async fn start_staleness_checker(mqtt_config: MqttConfig) {
+/// Returns true if `last` is older than `timeout_seconds`.
+/// Never-received (None) returns false — no data yet is not the same as stale data.
+fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
+    match last {
+        Some(t) => {
+            let age = t.elapsed().as_secs();
+            if age > timeout_seconds {
+                log::warn!("MQTT staleness: {} STALE ({}s > {}s)", label, age, timeout_seconds);
+                true
+            } else {
+                log::debug!("MQTT staleness: {} fresh ({}s)", label, age);
+                false
+            }
+        }
+        None => {
+            log::debug!("MQTT staleness: {} never received data", label);
+            false
+        }
+    }
+}
+
+async fn start_staleness_checker(mqtt_config: MqttConfig) {
     loop {
-        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        sleep(Duration::from_secs(30)).await;
 
-        let timeout_seconds = mqtt_config.mqtt_timeout_seconds;
+        let timeout = mqtt_config.mqtt_timeout_seconds;
+        let snap = *SUPERVISORY.read().await;
 
-        log::debug!("Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
-
-        let sup_snapshot = *SUPERVISORY.read().await;
-
-        // Check smart_charge staleness
-        {
-            log::debug!("Staleness check: Starting smart_charge staleness check");
-            //let data = CHADEMO_DATA.read().await;
-            if let Some(last_update) = sup_snapshot.smart_charge_update {
-                let age = last_update.elapsed().as_secs();
-                if age > timeout_seconds {
-                    log::warn!("Staleness check: smart_charge data is stale (age = {}s) - setting to false", age);
-                    SUPERVISORY.write().await.update_smart_charge(false, true);
-                } else {
-                    log::debug!("Staleness check: smart_charge data is fresh (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }
-            } else {
-                log::debug!("Staleness check: No smart_charge_update timestamp found (never received data?)");
-            }
+        if is_stale(snap.smart_charge_request_update, timeout, "smart_charge_request") {
+            SUPERVISORY.write().await.update_smart_charge_request(false, true);
         }
 
-        // Check ev_drain_protection staleness
-        {
-            log::debug!("Staleness check: Starting ev_drain_protection staleness check");
-
-            if let Some(last_update) = sup_snapshot.ev_drain_protection_update {
-                let age = last_update.elapsed().as_secs();
-
-                if age > timeout_seconds {
-                    log::warn!("Staleness check: ev_drain_protection data is stale (age = {}s) - setting to false", age);
-                    SUPERVISORY.write().await.update_ev_drain_protection(false, true);
-                } else {
-                    log::debug!("Staleness check: ev_drain_protection data is fresh (age = {}s ≤ {}s timeout)", age, timeout_seconds);
-                }
-            } else {
-                log::warn!(
-                    "Staleness check: No ev_drain_protection_update timestamp found (never received data?)"
-                );
-            }
+        if is_stale(snap.ev_drain_protection_request_update, timeout, "ev_drain_protection_request") {
+            SUPERVISORY.write().await.update_ev_drain_protection_request(false, true);
         }
 
+        if is_stale(snap.smart_export_request_update, timeout, "smart_export_request") {
+            SUPERVISORY.write().await.update_smart_export_request(false, true);
+        }
     }
 }

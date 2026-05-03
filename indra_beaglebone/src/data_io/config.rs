@@ -38,6 +38,9 @@ pub struct MqttConfig {
     pub mqtt_ev_drain_protection_topic: String,
     pub mqtt_ev_drain_protection_field: String,
 
+    pub mqtt_smart_export_topic: String,
+    pub mqtt_smart_export_field: String,
+
 
     //remove
     //pub mqtt_meter: bool,

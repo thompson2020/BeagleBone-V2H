@@ -13,13 +13,17 @@ interval = 10                			# seconds
 
 sub = "indra/cmd_sub"				#Receive commands
 
-mqtt_smart_charge_topic = "indra_from_ha/smartcharge/status"			#Will charge if supplier offers dynamic off-peak rates e.g Octopus Intelligent Tariffs. (if value = 1 )
-mqtt_smart_charge_field = "smartcharge"
+mqtt_smart_charge_topic = "indra_from_ha/smart_charge/request"          	#Will charge if supplier offers dynamic off-peak rates e.g Octopus Intelligent Tariffs. (if value = 1)
+mqtt_smart_charge_field = "smart_charge"
 
-mqtt_ev_drain_protection_topic = "indra_from_ha/evdrainprotection/status"	#Will prevent discharge when EV is charging (if value = 1 )
-mqtt_ev_drain_protection_field = "evdrainprotection"
+mqtt_ev_drain_protection_topic = "indra_from_ha/ev_drain_protection/request"  	#Will prevent discharge when EV charger is drawing power. (if value = 1)
+mqtt_ev_drain_protection_field = "ev_drain_protection"
 
-mqtt_timeout_seconds = 120      						# 2 minutes - if no update, treat meter as offline
+mqtt_smart_export_topic = "indra_from_ha/smart_export/request"          	#Will discharge battery to grid when export price is favourable. (if value = 1)
+mqtt_smart_export_field = "smart_export"
+
+mqtt_timeout_seconds = 120      						# 2 minutes - if no update, treat data as offline
+
 
 
 

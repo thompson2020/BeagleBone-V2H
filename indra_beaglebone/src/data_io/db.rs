@@ -70,13 +70,13 @@ impl From<ChargerSnapshot> for ChademoDbRow {
         Self {
             id: 0,
             timestamp: Utc::now(),
-            dc_kw: value.dc_kw,
+            dc_kw: value.dc_w,
             soc: value.soc as u8,
-            volts: value.volts as u16,
-            temp: value.temp,
-            amps: value.amps,
+            volts: value.dc_output_volts as u16,
+            temp: value.pre_temp,
+            amps: value.dc_output_amps,
             requested_amps: value.requested_amps as i16,
-            fan: value.fan,
+            fan: value.pre_fan,
             meter_kw: value.meter_kw,
         }
     }
