@@ -15,12 +15,6 @@ use tokio::time::sleep;
 use chrono::Timelike;
 
 use super::config::MqttConfig;
-//use crate::data_io::config::MeterConfig;
-
-//use crate::meter::update_total_power;
-//use crate::meter::mark_total_power_as_stale;
-//use crate::meter::update_phase_power;
-//use crate::meter::mark_phase_power_as_stale;
 
 use crate::statics::ChademoTx;
 use crate::global_state::ChargeParameters;
@@ -168,29 +162,26 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
     });
 
     //Subscribe to command topic for web GUI commands
-    log::info!("MQTT meter: subscribing to: command topic | {}", mqtt_config.sub);
+    log::info!("MQTT: subscribing to: command topic | {}", mqtt_config.sub);
     client
         .subscribe(&mqtt_config.sub, QoS::AtLeastOnce)
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
     
     //subscribe to smart charge topic
-    log::info!("MQTT meter: subscribing to: smart charge topic | {}", mqtt_config.mqtt_smart_charge_topic);
+    log::info!("MQTT: subscribing to: smart charge topic | {}", mqtt_config.mqtt_smart_charge_topic);
     client.subscribe(&mqtt_config.mqtt_smart_charge_topic, QoS::AtMostOnce)
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
 
     //subscribe to ev_drain_protection topic
-    log::info!("MQTT meter: subscribing to: ev_drain_protection topic | {}", mqtt_config.mqtt_ev_drain_protection_topic);
+    log::info!("MQTT: subscribing to: ev_drain_protection topic | {}", mqtt_config.mqtt_ev_drain_protection_topic);
     client.subscribe(&mqtt_config.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
         .await
         .map_err(|e| IndraError::MqttSub(e))?;
 
-    log::info!("MQTT meter: Spawn Staleness check");
+    log::info!("MQTT: Spawn Staleness check");
     tokio::spawn(start_staleness_checker(mqtt_config.clone()));
-
-
-
 
 
 
@@ -265,13 +256,13 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
                 }
 
 
-                // If it's our smart_charge_topic, pass raw payload to meter.rs
+                // If it's our smart_charge_topic, then handle the smart charge command
                 if msg.topic == mqtt_config.mqtt_smart_charge_topic {
                     log::debug!("MQTT message from topic: smart charge | {}", msg.topic);
                     update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_smart_charge_field.clone(), 1.0, mqtt_config, &mode_tx  ).await;
                 }
 
-                // If it's our ev_drain_protection_topic, pass raw payload to meter.rs
+                // If it's our ev_drain_protection_topic, then handle the ev drain protection command
                 if msg.topic == mqtt_config.mqtt_ev_drain_protection_topic {
                     log::debug!("MQTT message from topic:  ev drain protection | {}", msg.topic);
                     update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), mqtt_config.mqtt_ev_drain_protection_field.clone(), 1.0, mqtt_config, &mode_tx  ).await;
@@ -572,7 +563,7 @@ pub async fn handle_smart_charge_change(enabled: bool, mode_tx: &ChademoTx) {
 
 
 
-// Background task to check if any MQTT meter data is stale
+// Background task to check if any MQTT data is stale
 pub async fn start_staleness_checker(mqtt_config: MqttConfig) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;

@@ -12,7 +12,7 @@ use tokio::{
     sync::Mutex,
     time::{sleep, Duration},
 };
-// MQTT meter additions
+// MQTT Meter additions
 use serde_json::Value;
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
@@ -108,7 +108,7 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
         ////////////////////////////////////////////////
         //          mqtt meter code
         ////////////////////////////////////////////////
-        log::info!("Mqtt meter enabled | Mqtt");
+        log::info!("MQTT Meter enabled | MQTT");
 
         // Clone the values we need BEFORE they are moved into mqttoptions
         let client_id = meter_config.mqtt_meter_client_id.clone();
@@ -139,20 +139,20 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
 
 
         //subscribe to total power topic
-        log::info!("MQTT meter: subscribing to:  total power topic | {}", meter_config.mqtt_meter_total_power_topic);
+        log::info!("MQTT Meter: subscribing to:  total power topic | {}", meter_config.mqtt_meter_total_power_topic);
         client.subscribe(&meter_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
             .await
             .map_err(|e| IndraError::MqttSub(e))?;
     
         // Subscribe to phase power topic (only if it's different from total power topic)
         if meter_config.mqtt_meter_phase_power_topic != meter_config.mqtt_meter_total_power_topic {
-            log::info!("MQTT meter: subscribing to: phase power | {}", meter_config.mqtt_meter_phase_power_topic);
+            log::info!("MQTT Meter: subscribing to: phase power | {}", meter_config.mqtt_meter_phase_power_topic);
             client.subscribe(&meter_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
                 .await
                 .map_err(|e| IndraError::MqttSub(e))?;
             }
         
-        log::info!("MQTT meter: Spawn Staleness check");
+        log::info!("MQTT Meter: Spawn Staleness check");
         let mode_tx_for_staleness = mode_tx.clone();
         tokio::spawn(start_meter_staleness_checker(meter_config.clone(), mode_tx_for_staleness));
     
@@ -171,17 +171,17 @@ async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &Mete
                 let payload_str = String::from_utf8_lossy(&msg.payload);
                 let clean_payload = payload_str.trim().replace(['\n', '\r'], "");
                 let readable_payload = clean_payload .replace(",", ", ").replace(":", ": ");
-                log::debug!("MQTT Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
+                log::debug!("MQTT Meter: Message received | Topic: '{}' | Payload: '{}'",  msg.topic, readable_payload);
 
                 // If it's our total meter topic, pass raw payload to meter.rs
                 if msg.topic == meter_config.mqtt_meter_total_power_topic {
-                    log::debug!("MQTT message from topic: meter total (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_total_power_field);
+                    log::debug!("MQTT Meter: message from topic: meter total (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_total_power_field);
                     update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_total_power_field.clone(), meter_config.mqtt_meter_total_power_scale.clone(), meter_config   ).await;
                 }
 
                 // If it's our phase meter topic, pass raw payload to meter.rs
                 if msg.topic == meter_config.mqtt_meter_phase_power_topic {
-                    log::debug!("MQTT message from topic: meter phase (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_phase_power_field);
+                    log::debug!("MQTT Meter: message from topic: meter phase (check field) | {} field: {}", msg.topic, meter_config.mqtt_meter_phase_power_field);
                     update_from_mqtt(clean_payload.to_string(),msg.topic.clone(), meter_config.mqtt_meter_phase_power_field.clone(), meter_config.mqtt_meter_phase_power_scale.clone(), meter_config  ).await;
                 }
                 
@@ -201,11 +201,11 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
     let payload_trim = payload.trim();
 
     // Now update the correct value
-    log::debug!("MQTT: Extracting topic & field: | {} , {}", topic, mqtt_field );
+    log::debug!("MQTT Meter: Extracting topic & field: | {} , {}", topic, mqtt_field );
 
     // Case 1: Plain number
     let val: f32 = if let Ok(val) = payload_trim.parse::<f32>() {
-        log::debug!("MQTT: value extracted(plain number): | {:.2} W", val);
+        log::debug!("MQTT Meter: value extracted(plain number): | {:.2} W", val);
         val
     } 
     // Case 2: JSON object
@@ -215,7 +215,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
             current = match current.get(key) {
                 Some(v) => v,
                 None => {
-                    log::warn!("MQTT: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
+                    log::warn!("MQTT Meter: JSON missing path '{}' | payload: {}", mqtt_field, payload_trim);
                     return;
                 }
             };
@@ -224,23 +224,23 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
         match current.as_f64() {
             Some(v) => {
                 let val = v as f32;
-                log::debug!("MQTT: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
+                log::debug!("MQTT Meter: value extracted(JSON field '{}') | {:.2}", mqtt_field, val);
                 val
             }
             None => {
-                log::warn!("MQTT: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
+                log::warn!("MQTT Meter: JSON missing field '{}' | payload: {}", mqtt_field, payload_trim);
                 return;
             }
         }
     } 
     else {
-        log::warn!("MQTT: failed to parse as number or JSON | payload: {}", payload_trim);
+        log::warn!("MQTT Meter: failed to parse as number or JSON | payload: {}", payload_trim);
         return;
     };
 
     let scaled_val = val * scale;
     if scale != 1.0 {
-        log::debug!("MQTT: scaled value by {} | {:.2}", scale, scaled_val);
+        log::debug!("MQTT Meter: scaled value by {} | {:.2}", scale, scaled_val);
     }
 
     
@@ -253,7 +253,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
             if t == meter_config.mqtt_meter_total_power_topic
             && f == meter_config.mqtt_meter_total_power_field =>
         {
-            log::debug!("MQTT: calling update_total_power | {}", scaled_val);
+            log::debug!("MQTT Meter: calling update_total_power | {}", scaled_val);
             update_total_power(scaled_val).await;
             return;
         }
@@ -263,7 +263,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
             if t == meter_config.mqtt_meter_phase_power_topic
             && f == meter_config.mqtt_meter_phase_power_field =>
         {
-            log::debug!("MQTT: calling update_phase_power | {}", scaled_val);
+            log::debug!("MQTT Meter: calling update_phase_power | {}", scaled_val);
             update_phase_power(scaled_val).await;
             return;
         }
@@ -272,7 +272,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
 
         // ===================== UNKNOWN =====================
         _ => {
-            log::warn!("MQTT: unknown topic/field | {} / {}", topic, mqtt_field);
+            log::warn!("MQTT Meter: unknown topic/field | {} / {}", topic, mqtt_field);
         }
     }
 
@@ -287,7 +287,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
 
 
 
-// MQTT handled in mqtt.rs - only meter updates are here for METER access
+// MQTT update events
 pub async fn update_total_power(val: f32) {
     {
         let mut meter = METER.write().await;
@@ -297,7 +297,7 @@ pub async fn update_total_power(val: f32) {
         let mut data = CHADEMO_DATA.write().await;
         data.from_meter(val, false);
     }
-    log::debug!("MQTT updated: total power | {:.2} W", val);
+    log::debug!("MQTT Meter: updated: total power | {:.2} W", val);
 }
 pub async fn mark_total_power_as_stale() {
     *METER.write().await = None;
@@ -305,21 +305,21 @@ pub async fn mark_total_power_as_stale() {
         let mut data = CHADEMO_DATA.write().await;
         data.from_meter(0.0, true);
     }    
-    log::error!("MQTT updated: total power is STALE → treating as offline");
+    log::error!("MQTT Meter: updated: total power is STALE → treating as offline");
 }
 pub async fn update_phase_power(val: f32) {
     {
         let mut data = CHADEMO_DATA.write().await;
         data.from_meter_phase(Some(val), false);
     }
-    log::debug!("MQTT updated: phase power | {:.2} W", val);
+    log::debug!("MQTT Meter: updated: phase power | {:.2} W", val);
 }
 pub async fn mark_phase_power_as_stale() {
     {
         let mut data = CHADEMO_DATA.write().await;
         data.from_meter_phase(None, true);
     }
-    log::error!("MQTT updated: phase power to stale (treating as offline) | Stale ");
+    log::error!("MQTT Meter: updated: phase power to stale (treating as offline) | Stale ");
 }
 
 
@@ -330,56 +330,56 @@ pub async fn mark_phase_power_as_stale() {
 
 
 
-// Background task to check if any MQTT meter data is stale
+// Background task to check if any MQTT Meter data is stale
 pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: ChademoTx) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
         let timeout_seconds = meter_config.mqtt_meter_timeout_seconds;
 
-        log::debug!("Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
+        log::debug!("Meter Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
 
         let snapshot = {
             let data = CHADEMO_DATA.read().await;
             *data
         };
 
-        
+
        // Check total power staleness
         {
-            log::debug!("Staleness check: Starting total power check");
+            log::debug!("Meter Staleness check: Starting total power check");
 
             //let data = CHADEMO_DATA.read().await;
-            //log::debug!("Staleness check: Acquired read lock on CHADEMO_DATA");
+            //log::debug!("Meter Staleness check: Acquired read lock on CHADEMO_DATA");
 
             if let Some(last_update) = snapshot.last_total_power_update {
-                log::debug!("Staleness check: last_total_power_update found");
+                log::debug!("Meter Staleness check: last_total_power_update found");
 
                 let age = last_update.elapsed().as_secs();
-                log::debug!("Staleness check: total power age = {} seconds", age);
+                log::debug!("Meter Staleness check: total power age = {} seconds", age);
 
                 if age > timeout_seconds {
-                    log::warn!("Staleness check:  total power data is STALE (age = {}s > {}s timeout)", 
+                    log::warn!("Meter Staleness check:  total power data is STALE (age = {}s > {}s timeout)", 
                             age, timeout_seconds);
 
                     // Safety: Only force Idle if currently in V2H
                     if snapshot.state == OperationMode::V2h {
-                        log::warn!("Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
+                        log::warn!("Meter Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
                         let _ = mode_tx.send(OperationMode::Idle).await;
                     } else {
-                        log::info!("Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)", 
+                        log::info!("Meter Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)", 
                                    snapshot.state);
                     }
-                    log::debug!("Staleness check: mark_total_power_as_stale()");
+                    log::debug!("Meter Staleness check: mark_total_power_as_stale()");
                     crate::meter::mark_total_power_as_stale().await;
                 } else {
-                    log::debug!("Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
+                    log::debug!("Meter Staleness check: total power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
                 }
             } else {
-                log::warn!("Staleness check: No last_total_power_update timestamp found (never received data?)");
+                log::warn!("Meter Staleness check: No last_total_power_update timestamp found (never received data?)");
             }
 
-            log::debug!("Staleness check: Finished total power check");
+            log::debug!("Meter Staleness check: Finished total power check");
         }
 
 
@@ -388,17 +388,17 @@ pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: C
       // Check phase power staleness
         {
             //let data = CHADEMO_DATA.read().await;
-            log::debug!("Staleness check: Starting phase power staleness check");            
+            log::debug!("Meter Staleness check: Starting phase power staleness check");            
             if let Some(last_update) = snapshot.last_phase_power_update {
                 let age = last_update.elapsed().as_secs();
                 if age > timeout_seconds {
-                    log::warn!("Staleness check: phase power data is stale (age = {}s)", age);
+                    log::warn!("Meter Staleness check: phase power data is stale (age = {}s)", age);
                     crate::meter::mark_phase_power_as_stale().await;
                 } else {
-                    log::debug!("Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
+                    log::debug!("Meter Staleness check: phase power data is FRESH (age = {}s ≤ {}s timeout)", age, timeout_seconds);
                 }   
             } else {
-                log::warn!("Staleness check: No last_phase_power_update timestamp found (never received data?)");
+                log::warn!("Meter Staleness check: No last_phase_power_update timestamp found (never received data?)");
             }   
         }
 
