@@ -2,6 +2,7 @@ use crate::{
     chademo::state::CHADEMO,
     data_io::{
         db::{ChademoDbRow, Parameters},
+        operator_settings::{update as update_settings, OperatorSettings},
         status::{snapshot, ChargerSnapshot},
     },
     global_state::OperationMode,
@@ -168,6 +169,11 @@ async fn process_ws_message(
                 log::debug!("GetEvents response to client | {:?}", response);
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
+            Cmd::SetSettings(new_settings) => {
+                log::info!("[OPSETTINGS] SetSettings command received via WebSocket");
+                update_settings(new_settings).await;
+                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
+            }
             Cmd::GetRecords(params) => {
                 let handle = async move {
                     if let Some(db) = POOL.get() {
@@ -272,6 +278,7 @@ enum Cmd {
     SetEvents(Events),
     GetEvents,
     GetRecords(Parameters),
+    SetSettings(OperatorSettings),
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]

@@ -83,6 +83,9 @@ async fn main() -> Result<(), &'static str> {
         .await
         .expect("SQLx error");
 
+    let loaded_settings = data_io::operator_settings::load().await;
+    *data_io::operator_settings::OPERATOR_SETTINGS.write().await = loaded_settings;
+
     let (led_tx, led_rx) = statics::led_channel();
     let (mode_tx, mode_rx) = statics::chademo_channel();
     let (events_tx, events_rx) = statics::events_channel();
