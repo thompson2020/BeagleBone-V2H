@@ -95,6 +95,7 @@ impl std::fmt::Display for Chademo {
     }
 }
 
+#[allow(dead_code)]
 impl Chademo {
     pub fn new() -> Self {
         Self {

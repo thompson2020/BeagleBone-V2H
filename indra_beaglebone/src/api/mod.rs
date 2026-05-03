@@ -7,7 +7,7 @@ use crate::{
     global_state::OperationMode,
     log_error,
     scheduler::{get_eventfile_sync, Events},
-    statics::{ChademoTx, EventsTx, OPERATIONAL_MODE},
+    statics::{ChademoTx, EventsTx},
     POOL,
 };
 use futures_util::{future, StreamExt, TryStreamExt};

@@ -6,7 +6,6 @@ use chademo::{
 };
 use data_io::{config::APP_CONFIG, db::Database, meter, mqtt, panel};
 use global_state::OperationMode;
-use statics::OPERATIONAL_MODE;
 use tokio::{
     signal::unix::{signal, SignalKind},
     sync::OnceCell,
@@ -128,20 +127,11 @@ pub mod statics {
     use tokio_socketcan::CANFrame;
 
     use crate::{
-        chademo::state::Chademo, //ChargerState,State
         data_io::{db::ChademoDbRow, panel::LedCommand},
         global_state::OperationMode,
         pre_charger::PreCommand,
         scheduler::Events,
     };
-
-    lazy_static::lazy_static! {
-        // pub static ref STATE: Arc<Mutex<State>> = Arc::new(Mutex::new(State(ChargerState::Idle)));
-        //CHADEMO - not used - defined here to stops lots of warnings about unused functions - probably a better way to do this!
-        pub static ref CHADEMO: Arc<Mutex<Chademo>> = Arc::new(Mutex::new(Chademo::new()));
-        pub static ref OPERATIONAL_MODE: Arc<Mutex<OperationMode>> =
-            Arc::new(Mutex::new(OperationMode::default()));
-    }
 
     pub type Channel<T> = (mpsc::Sender<T>, mpsc::Receiver<T>);
     pub type PreRx = mpsc::Receiver<PreCommand>;

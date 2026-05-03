@@ -6,13 +6,6 @@
 // Type:           Arc<AppConfig>
 // Purpose:        Global configuration loaded from config.toml
 
-// OPERATIONAL_MODE
-// Defined in:     main.rs                                                Used in:  main.rs
-// Type:           Arc<Mutex<OperationMode>>                                        chademo/ev_connect.rs
-// Purpose:        Current operation mode (Idle, Charge, V2h, etc.)                 data_io/keyboard.rs
-//                                                                                  data_io/panel.rs
-//                                                                                  api/mod.rs
-
 // CHADEMO
 // Defined in:     chademo/state.rs (duplicate in main.rs)                Used in:   api/mod.rs
 // Type:           Arc<Mutex<Chademo>>
@@ -51,17 +44,6 @@
 //                                                                                  data_io/meter.rs
 // Type:           Arc<AppConfig>
 // Purpose:        Global configuration loaded from config.toml
-// structure                        
-// ---------    
-//  <<TO DO>>
-
-
-// OPERATIONAL_MODE
-// Defined in:     main.rs                                                Used in:  main.rs
-// Type:           Arc<Mutex<OperationMode>>                                        chademo/ev_connect.rs
-// Purpose:        Current operation mode (Idle, Charge, V2h, etc.)                 data_io/keyboard.rs
-//                                                                                  data_io/panel.rs
-//                                                                                  api/mod.rs
 // structure                        
 // ---------    
 //  <<TO DO>>
