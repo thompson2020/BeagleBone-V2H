@@ -6,7 +6,6 @@ use crate::pre_charger::PreCharger;
 
 use lazy_static::lazy_static;
 use serde::Serialize;
-use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -112,13 +111,19 @@ impl MqttChademo {
         }
         self
     }
-    pub fn update_smart_charge(&mut self, enabled: bool) -> &mut Self {
+    pub fn update_smart_charge(&mut self, enabled: bool, stale: bool) -> &mut Self {
         self.smart_charge = enabled;
+        if !stale {
+            self.smart_charge_update = Some(Instant::now());
+        }
         self
     }
 
-    pub fn update_ev_drain_protection(&mut self, enabled: bool) -> &mut Self {
+    pub fn update_ev_drain_protection(&mut self, enabled: bool, stale: bool) -> &mut Self {
         self.ev_drain_protection = enabled;
+        if !stale {
+            self.ev_drain_protection_update = Some(Instant::now());
+        }
         self
     }
 }
@@ -144,41 +149,57 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
     mqttoptions.set_credentials(username, password);
     mqttoptions.set_transport(rumqttc::Transport::Tcp);
     mqttoptions.set_clean_session(true);
-    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 2);
+    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
     
-    // Clone configs for the spawned task so we can still use them later in this function
-    let mode_tx_for_eventloop = mode_tx.clone();  
+    let mode_tx_for_eventloop = mode_tx.clone();
     let mqtt_config_clone = mqtt_config.clone();
+    // Clone the client into the spawn so it can resubscribe after reconnections.
+    let client_for_reconnect = client.clone();
 
-	
-	tokio::spawn(async move {
+    tokio::spawn(async move {
+        use rumqttc::Event;
         loop {
-            if let Ok(mqtt_event) = eventloop.poll().await {
-                if let ControlFlow::Break(_) = handle_mqtt_event(mqtt_event, &mqtt_config_clone, mode_tx_for_eventloop.clone()).await {
-                    continue;
+            match eventloop.poll().await {
+                Ok(Event::Incoming(rumqttc::Packet::ConnAck(_))) => {
+                    // Fires on first connect and every reconnect. With clean_session(true)
+                    // the broker discards subscriptions on disconnect, so we resubscribe here.
+                    log::info!("MQTT: connected/reconnected — subscribing to topics");
+                    if let Err(e) = client_for_reconnect
+                        .subscribe(&mqtt_config_clone.sub, QoS::AtLeastOnce)
+                        .await
+                    {
+                        log::error!("MQTT: failed to subscribe to command topic | {e:?}");
+                    } else {
+                        log::info!("MQTT: subscribed | {}", mqtt_config_clone.sub);
+                    }
+                    if let Err(e) = client_for_reconnect
+                        .subscribe(&mqtt_config_clone.mqtt_smart_charge_topic, QoS::AtMostOnce)
+                        .await
+                    {
+                        log::error!("MQTT: failed to subscribe to smart charge topic | {e:?}");
+                    } else {
+                        log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_smart_charge_topic);
+                    }
+                    if let Err(e) = client_for_reconnect
+                        .subscribe(&mqtt_config_clone.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
+                        .await
+                    {
+                        log::error!("MQTT: failed to subscribe to ev drain protection topic | {e:?}");
+                    } else {
+                        log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_ev_drain_protection_topic);
+                    }
                 }
-            };
+                Ok(event) => {
+                    handle_mqtt_event(event, &mqtt_config_clone, mode_tx_for_eventloop.clone()).await;
+                }
+                Err(e) => {
+                    // Connection dropped — rumqttc will reconnect automatically.
+                    // Log it so disconnects are visible, then keep polling.
+                    log::error!("MQTT: connection error | {e:?}");
+                }
+            }
         }
     });
-
-    //Subscribe to command topic for web GUI commands
-    log::info!("MQTT: subscribing to: command topic | {}", mqtt_config.sub);
-    client
-        .subscribe(&mqtt_config.sub, QoS::AtLeastOnce)
-        .await
-        .map_err(|e| IndraError::MqttSub(e))?;
-    
-    //subscribe to smart charge topic
-    log::info!("MQTT: subscribing to: smart charge topic | {}", mqtt_config.mqtt_smart_charge_topic);
-    client.subscribe(&mqtt_config.mqtt_smart_charge_topic, QoS::AtMostOnce)
-        .await
-        .map_err(|e| IndraError::MqttSub(e))?;
-
-    //subscribe to ev_drain_protection topic
-    log::info!("MQTT: subscribing to: ev_drain_protection topic | {}", mqtt_config.mqtt_ev_drain_protection_topic);
-    client.subscribe(&mqtt_config.mqtt_ev_drain_protection_topic, QoS::AtMostOnce)
-        .await
-        .map_err(|e| IndraError::MqttSub(e))?;
 
     log::info!("MQTT: Spawn Staleness check");
     tokio::spawn(start_staleness_checker(mqtt_config.clone()));
@@ -227,7 +248,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
     }
 }
 
-async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig, mode_tx: ChademoTx) -> ControlFlow<()> {
+async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig, mode_tx: ChademoTx) {
     use rumqttc::Event::*;
 
     match mqtt_event {
@@ -275,8 +296,6 @@ async fn handle_mqtt_event(mqtt_event: rumqttc::Event, mqtt_config: &MqttConfig,
             // log::debug!("Outgoing {:?}", mqtt_out);
         }
     }
-
-    ControlFlow::Continue(())
 }
 
 
@@ -342,7 +361,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
 
             {
                 let mut data = CHADEMO_DATA.write().await;
-                data.update_smart_charge(enabled);
+                data.update_smart_charge(enabled, false);
             }
             
             log::debug!("MQTT: calling handle_smart_charge_change | {}", scaled_val);
@@ -361,7 +380,7 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
             log::debug!("MQTT: updating ev drain protection | {}", scaled_val);
 
             let mut data = CHADEMO_DATA.write().await;
-            data.update_ev_drain_protection(scaled_val > 0.0);
+            data.update_ev_drain_protection(scaled_val > 0.0, false);
 
             // TODO - Decide if we need to take any immediate action based on this change (e.g. if EV drain protection is enabled while in V2H, maybe force Idle mode for safety)
             return;
@@ -588,7 +607,7 @@ pub async fn start_staleness_checker(mqtt_config: MqttConfig) {
                     log::warn!("Staleness check: smart_charge data is stale (age = {}s) - setting to false", age);
                     {
                         let mut data = CHADEMO_DATA.write().await;
-                        data.update_smart_charge(false);
+                        data.update_smart_charge(false, true);
                     }
                 }
                 else {
@@ -613,7 +632,7 @@ pub async fn start_staleness_checker(mqtt_config: MqttConfig) {
                     );
 
                     let mut data = CHADEMO_DATA.write().await;
-                    data.update_ev_drain_protection(false);
+                    data.update_ev_drain_protection(false, true);
                 } else {
                     log::debug!(
                         "Staleness check: ev_drain_protection data is fresh (age = {}s ≤ {}s timeout)",

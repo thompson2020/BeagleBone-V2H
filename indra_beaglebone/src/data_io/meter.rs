@@ -16,7 +16,6 @@ use tokio::{
 use serde_json::Value;
 use rumqttc::{AsyncClient, Event, Incoming, MqttOptions, QoS};
 
-use std::ops::ControlFlow;
 use crate::global_state::OperationMode;
 use crate::statics::ChademoTx;
 
@@ -121,47 +120,55 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
         mqttoptions.set_credentials(username, password);
         mqttoptions.set_transport(rumqttc::Transport::Tcp);
         mqttoptions.set_clean_session(true);
-        let (client, mut eventloop) = AsyncClient::new(mqttoptions, 2);
-        
-        // Clone configs for the spawned task so we can still use them later in this function
-        let meter_config_clone = meter_config.clone();
-
-        
-        tokio::spawn(async move {
-            loop {
-                if let Ok(mqtt_event) = eventloop.poll().await {
-                    if let ControlFlow::Break(_) = handle_mqtt_meter_event(mqtt_event, &meter_config_clone).await {
-                        continue;
-                    }
-                };
-            }
-        });
+        let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
 
-        //subscribe to total power topic
-        log::info!("MQTT Meter: subscribing to:  total power topic | {}", meter_config.mqtt_meter_total_power_topic);
-        client.subscribe(&meter_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
-            .await
-            .map_err(|e| IndraError::MqttSub(e))?;
-    
-        // Subscribe to phase power topic (only if it's different from total power topic)
-        if meter_config.mqtt_meter_phase_power_topic != meter_config.mqtt_meter_total_power_topic {
-            log::info!("MQTT Meter: subscribing to: phase power | {}", meter_config.mqtt_meter_phase_power_topic);
-            client.subscribe(&meter_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
-                .await
-                .map_err(|e| IndraError::MqttSub(e))?;
-            }
-        
         log::info!("MQTT Meter: Spawn Staleness check");
         let mode_tx_for_staleness = mode_tx.clone();
         tokio::spawn(start_meter_staleness_checker(meter_config.clone(), mode_tx_for_staleness));
-    
-        return Ok(());
+
+        // Run the eventloop inline — this keeps `client` alive for the lifetime of this task.
+        // Subscriptions are done inside ConnAck so they are re-issued on every reconnect.
+        loop {
+            match eventloop.poll().await {
+                Ok(Event::Incoming(rumqttc::Packet::ConnAck(_))) => {
+                    // Fires on first connect and on every reconnect. With clean_session(true)
+                    // the broker discards subscriptions on disconnect, so we must resubscribe here.
+                    log::info!("MQTT Meter: connected/reconnected — subscribing to topics");
+                    if let Err(e) = client
+                        .subscribe(&meter_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
+                        .await
+                    {
+                        log::error!("MQTT Meter: failed to subscribe to total power topic | {e:?}");
+                    } else {
+                        log::info!("MQTT Meter: subscribed | {}", meter_config.mqtt_meter_total_power_topic);
+                    }
+                    if meter_config.mqtt_meter_phase_power_topic != meter_config.mqtt_meter_total_power_topic {
+                        if let Err(e) = client
+                            .subscribe(&meter_config.mqtt_meter_phase_power_topic, QoS::AtMostOnce)
+                            .await
+                        {
+                            log::error!("MQTT Meter: failed to subscribe to phase power topic | {e:?}");
+                        } else {
+                            log::info!("MQTT Meter: subscribed | {}", meter_config.mqtt_meter_phase_power_topic);
+                        }
+                    }
+                }
+                Ok(event) => {
+                    handle_mqtt_meter_event(event, &meter_config).await;
+                }
+                Err(e) => {
+                    // Connection dropped — rumqttc will reconnect automatically.
+                    // Log it so disconnects are visible, then keep polling.
+                    log::error!("MQTT Meter: connection error | {e:?}");
+                }
+            }
+        }
     }
 
 }
 
-async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &MeterConfig) -> ControlFlow<()> {
+async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &MeterConfig) {
     use rumqttc::Event::*;
 
     match mqtt_event {
@@ -192,8 +199,6 @@ async fn handle_mqtt_meter_event(mqtt_event: rumqttc::Event, meter_config: &Mete
         }
        
     }
-
-    ControlFlow::Continue(())
 }
 
 
