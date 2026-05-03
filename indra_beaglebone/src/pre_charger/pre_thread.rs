@@ -3,7 +3,6 @@ use super::{
 };
 use crate::{
     chademo::state::{pin_init_out_high, PREACPIN},
-    data_io::mqtt::CHADEMO_DATA,
     error::IndraError,
     global_state::OperationMode,
     log_error,
@@ -54,19 +53,16 @@ pub async fn init(pre_rx_m: PreRxMutex) -> Result<(), IndraError> {
             // let mut data = predata.lock().await;
         }
 
-        // update MQTT struct
+        // update PREDATA
         {
             *predata.lock().await = pre;
         }
-        if let Ok(mut data) = CHADEMO_DATA.try_write() {
-            data.from_pre(pre);
-            if matches!(pre.state, PreState::Offline) {
-                pre_ac_contactor
-                    .set_value(0)
-                    .map_err(|e| IndraError::PinAccess(e))?;
-                log::warn!("Pre AC contactor opened");
-                return Ok(());
-            };
+        if matches!(pre.state, PreState::Offline) {
+            pre_ac_contactor
+                .set_value(0)
+                .map_err(|e| IndraError::PinAccess(e))?;
+            log::warn!("Pre AC contactor opened");
+            return Ok(());
         };
 
         // 1 sec Pre stats

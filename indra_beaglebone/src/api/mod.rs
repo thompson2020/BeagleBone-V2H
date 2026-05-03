@@ -2,7 +2,7 @@ use crate::{
     chademo::state::CHADEMO,
     data_io::{
         db::{ChademoDbRow, Parameters},
-        mqtt::{MqttChademo, CHADEMO_DATA},
+        status::{snapshot, ChargerSnapshot},
     },
     global_state::OperationMode,
     log_error,
@@ -135,12 +135,9 @@ async fn process_ws_message(
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
             Cmd::GetData => {
-                let snapshot = {
-                    let guard = CHADEMO_DATA.read().await;
-                    *guard
-                };
-                let response = Response::Data(snapshot);
-                log::debug!("GetData response to client | {:?}", response);  
+                let snap = snapshot().await;
+                let response = Response::Data(snap);
+                log::debug!("GetData response to client | {:?}", response);
                 Ok(Message::Text(serde_json::to_string(&response).unwrap()))
             }
             Cmd::GetMode => {
@@ -283,7 +280,7 @@ struct Instruction {
 }
 #[derive(Serialize, Debug)]
 enum Response {
-    Data(MqttChademo),
+    Data(ChargerSnapshot),
     Mode(OperationMode),
     Events(Events),
     Records(Vec<ChademoDbRow>),

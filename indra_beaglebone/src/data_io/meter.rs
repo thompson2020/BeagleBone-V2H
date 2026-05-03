@@ -1,5 +1,4 @@
 use super::config::MeterConfig;
-use crate::data_io::mqtt::CHADEMO_DATA;
 use crate::error::IndraError;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::io::AsyncReadExt;
@@ -20,8 +19,16 @@ use crate::global_state::OperationMode;
 use crate::statics::ChademoTx;
 
 
+#[derive(Clone, Copy, Default)]
+pub struct MeterState {
+    pub total_w: Option<f32>,
+    pub phase_w: Option<f32>,
+    pub last_total_update: Option<Instant>,
+    pub last_phase_update: Option<Instant>,
+}
+
 lazy_static::lazy_static! {
-    pub static ref METER: Arc<RwLock<Option<f32>>> = Arc::new(RwLock::new(Some(0f32)));
+    pub static ref METER: Arc<RwLock<MeterState>> = Arc::new(RwLock::new(MeterState::default()));
 }
 
 pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), IndraError> {
@@ -88,17 +95,16 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
                 };
 
                 log::info!("Meter value  | {} ", val);
-                *METER.write().await = Some(val);
                 {
-                    let mut data = CHADEMO_DATA.write().await;
-                    data.from_meter(val,false);
+                    let mut meter = METER.write().await;
+                    meter.total_w = Some(val);
+                    meter.last_total_update = Some(Instant::now());
                 }
-                
                 if instant.elapsed() < Duration::from_millis(500) {
                     sleep(Duration::from_millis(500) - instant.elapsed()).await
                 }
             }
-            *METER.clone().write().await = None;
+            METER.write().await.total_w = None;
             drop(stream)
         }
 
@@ -296,34 +302,23 @@ pub async fn update_from_mqtt(payload: String, topic: String, mqtt_field: String
 pub async fn update_total_power(val: f32) {
     {
         let mut meter = METER.write().await;
-        *meter = Some(val);
-    }
-  {
-        let mut data = CHADEMO_DATA.write().await;
-        data.from_meter(val, false);
+        meter.total_w = Some(val);
+        meter.last_total_update = Some(Instant::now());
     }
     log::debug!("MQTT Meter: updated: total power | {:.2} W", val);
 }
 pub async fn mark_total_power_as_stale() {
-    *METER.write().await = None;
-    {
-        let mut data = CHADEMO_DATA.write().await;
-        data.from_meter(0.0, true);
-    }    
+    METER.write().await.total_w = None;
     log::error!("MQTT Meter: updated: total power is STALE → treating as offline");
 }
 pub async fn update_phase_power(val: f32) {
-    {
-        let mut data = CHADEMO_DATA.write().await;
-        data.from_meter_phase(Some(val), false);
-    }
+    let mut meter = METER.write().await;
+    meter.phase_w = Some(val);
+    meter.last_phase_update = Some(Instant::now());
     log::debug!("MQTT Meter: updated: phase power | {:.2} W", val);
 }
 pub async fn mark_phase_power_as_stale() {
-    {
-        let mut data = CHADEMO_DATA.write().await;
-        data.from_meter_phase(None, true);
-    }
+    METER.write().await.phase_w = None;
     log::error!("MQTT Meter: updated: phase power to stale (treating as offline) | Stale ");
 }
 
@@ -344,20 +339,15 @@ pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: C
 
         log::debug!("Meter Staleness check: running staleness check (timeout = {}s)", timeout_seconds);
 
-        let snapshot = {
-            let data = CHADEMO_DATA.read().await;
-            *data
-        };
+        let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
+        let meter_snapshot = *METER.read().await;
 
 
        // Check total power staleness
         {
             log::debug!("Meter Staleness check: Starting total power check");
 
-            //let data = CHADEMO_DATA.read().await;
-            //log::debug!("Meter Staleness check: Acquired read lock on CHADEMO_DATA");
-
-            if let Some(last_update) = snapshot.last_total_power_update {
+            if let Some(last_update) = meter_snapshot.last_total_update {
                 log::debug!("Meter Staleness check: last_total_power_update found");
 
                 let age = last_update.elapsed().as_secs();
@@ -368,12 +358,12 @@ pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: C
                             age, timeout_seconds);
 
                     // Safety: Only force Idle if currently in V2H
-                    if snapshot.state == OperationMode::V2h {
+                    if current_mode == OperationMode::V2h {
                         log::warn!("Meter Staleness check: Meter stale + currently in V2H → forcing Idle for safety");
                         let _ = mode_tx.send(OperationMode::Idle).await;
                     } else {
-                        log::info!("Meter Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)", 
-                                   snapshot.state);
+                        log::info!("Meter Staleness check: Meter stale, but current mode is {:?} → no action taken (only V2H affected)",
+                                   current_mode);
                     }
                     log::debug!("Meter Staleness check: mark_total_power_as_stale()");
                     crate::meter::mark_total_power_as_stale().await;
@@ -394,7 +384,7 @@ pub async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: C
         {
             //let data = CHADEMO_DATA.read().await;
             log::debug!("Meter Staleness check: Starting phase power staleness check");            
-            if let Some(last_update) = snapshot.last_phase_power_update {
+            if let Some(last_update) = meter_snapshot.last_phase_update {
                 let age = last_update.elapsed().as_secs();
                 if age > timeout_seconds {
                     log::warn!("Meter Staleness check: phase power data is stale (age = {}s)", age);

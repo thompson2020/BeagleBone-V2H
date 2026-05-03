@@ -4,7 +4,7 @@ use crate::{
         can::*,
         state::{Chademo, *}, //ChargerState
     },
-    data_io::{mqtt::CHADEMO_DATA, panel::LedCommand},
+    data_io::panel::LedCommand,
     error::IndraError,
     global_state::{ChargeParameters, OperationMode},
     log_error,
@@ -508,12 +508,12 @@ async fn amps_meter_profiler(
     last_setpoint_amps: &f32,
     chademo: &Chademo,
 ) -> Result<f32, IndraError> {
-    let meter = if let Some(val) = *METER.read().await {
-        val + METER_BIAS
-    } else {
-        // return Err(IndraError::MeterOffline);
-        log::error!("Meter offline");
-        *feedback
+    let meter = match METER.read().await.total_w {
+        Some(val) => val + METER_BIAS,
+        None => {
+            log::error!("Meter offline");
+            *feedback
+        }
     };
 
     if *feedback == meter && meter.is_normal() {
@@ -559,14 +559,8 @@ fn limit_setpoint_amps(setpoint_amps: f32, chademo: &Chademo) -> f32 {
     }
 }
 
-// #[inline]
 async fn update_chademo_mutex(chademo: &Chademo) {
-    log::info!("Accessing CHADEMO_DATA as write");
-    if let Ok(mut w) = CHADEMO_DATA.clone().try_write() {
-        w.from_chademo(&chademo);
-    } else {
-        log::warn!("Accessing CHADEMO_DATA write lock failed");
-    }
+    *crate::chademo::state::CHADEMO.lock().await = *chademo;
 }
 
 async fn update_panel_leds(led_tx: &LedTx, chademo: &Chademo) {

@@ -4,3 +4,4 @@ pub(crate) mod db;
 pub(crate) mod meter;
 pub(crate) mod mqtt;
 pub(crate) mod panel;
+pub(crate) mod status;

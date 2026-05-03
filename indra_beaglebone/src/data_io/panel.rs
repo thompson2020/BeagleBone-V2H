@@ -19,7 +19,6 @@ use tokio::time::sleep;
 use embedded_hal::i2c::{I2c, Operation as I2cOperation};
 use linux_embedded_hal::I2cdev;
 
-use crate::mqtt::CHADEMO_DATA;
 
 
 
@@ -102,10 +101,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
 
                 // send state update to toggle charge only
                 log::debug!("Panel: Boost Button Pressed" );
-                let current_mode = {
-                    let guard = CHADEMO_DATA.read().await;
-                    guard.state
-                };
+                let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
                 log::debug!("Panel: Boost Button - Current Mode: {:?}", current_mode);
                 if matches!(current_mode, OperationMode::Charge(_) ) {
                   log::debug!("Panel: Boost Button - Changing to Idle");
@@ -134,10 +130,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
 
                 // send state update to toggle charge only
                 log::debug!("Panel: OnOff Button Pressed" );
-                let current_mode = {
-                    let guard = CHADEMO_DATA.read().await;
-                    guard.state
-                };
+                let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
                 log::debug!("Panel: OnOff Button - Current Mode: {:?}", current_mode);
                 if matches!(current_mode, OperationMode::Charge(_) | OperationMode::Discharge(_) | OperationMode::V2h ) {
                     log::debug!("Panel: OnOff Button - Changing to Idle");

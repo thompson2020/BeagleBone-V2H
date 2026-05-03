@@ -16,26 +16,24 @@ use tokio::time::{sleep, timeout, Instant};
 use crate::error::IndraError;
 use crate::POOL;
 
-use super::meter::METER;
-use super::mqtt::{MqttChademo, CHADEMO_DATA};
+use super::status::{snapshot, ChargerSnapshot};
 
 const DB_URL: &str = "sqlite://database.db";
 
 pub async fn init(update_millisecs: u64) -> Result<(), IndraError> {
-    let row_data = CHADEMO_DATA.clone();
     let update_period = std::time::Duration::from_millis(update_millisecs);
     loop {
         let instant = Instant::now();
 
-        let row = *row_data.read().await;
-        if row.state.is_inactive() {
+        let snap = snapshot().await;
+        if snap.state.is_inactive() {
             // only record activity
             sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
 
         if let Some(db) = POOL.get() {
-            match db.add_record(&(row).into()).await {
+            match db.add_record(&snap.into()).await {
                 Ok((row_id, data)) => {
                     if let Ok(json) = serde_json::to_string(&data) {
                         let pretty_json = json.replace(":", ": ").replace(",", ", ");
@@ -67,23 +65,19 @@ pub struct ChademoDbRow {
     pub fan: u8,
     pub meter_kw: f32,
 }
-impl From<MqttChademo> for ChademoDbRow {
-    fn from(value: MqttChademo) -> Self {
-        let meter_kw = match METER.clone().try_read().as_deref() {
-            Ok(Some(val)) => val * 0.001,
-            _ => 0.0,
-        };
+impl From<ChargerSnapshot> for ChademoDbRow {
+    fn from(value: ChargerSnapshot) -> Self {
         Self {
             id: 0,
             timestamp: Utc::now(),
-            dc_kw: value.volts * value.amps * 0.001,
+            dc_kw: value.dc_kw,
             soc: value.soc as u8,
             volts: value.volts as u16,
             temp: value.temp,
             amps: value.amps,
             requested_amps: value.requested_amps as i16,
             fan: value.fan,
-            meter_kw,
+            meter_kw: value.meter_kw,
         }
     }
 }
