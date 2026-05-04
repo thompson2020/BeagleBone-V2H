@@ -39,7 +39,10 @@ pub struct ChargerSnapshot {
     
     pub smart_export_request: bool,
     pub smart_export_active: bool,
-    
+
+    pub smart_export_excess_solar_request: bool,
+    pub smart_export_excess_solar_active: bool,
+
     pub ready_to_drive_request: bool,
     pub ready_to_drive_active: bool,
 
@@ -87,8 +90,12 @@ pub async fn snapshot() -> ChargerSnapshot {
         ev_drain_protection_request: sup.ev_drain_protection_request,
         ev_drain_protection_active:  sup.ev_drain_protection_active,
 
-        smart_export_request:        sup.smart_export_request,
-        smart_export_active:         sup.smart_export_active,
+        smart_export_request:                    sup.smart_export_request,
+        smart_export_active:                     sup.smart_export_active,
+
+        smart_export_excess_solar_request:       sup.smart_export_excess_solar_request,
+        smart_export_excess_solar_active:        sup.smart_export_excess_solar_active,
+
         ready_to_drive_request:      sup.ready_to_drive_request,
         ready_to_drive_active:       sup.ready_to_drive_active,
         off_peak_charging_request:   sup.off_peak_charging_request,

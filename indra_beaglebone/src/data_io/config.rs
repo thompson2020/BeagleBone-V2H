@@ -41,6 +41,9 @@ pub struct MqttConfig {
     pub mqtt_smart_export_topic: String,
     pub mqtt_smart_export_field: String,
 
+    pub mqtt_smart_export_excess_solar_topic: String,
+    pub mqtt_smart_export_excess_solar_field: String,
+
 
     //remove
     //pub mqtt_meter: bool,

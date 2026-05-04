@@ -17,20 +17,26 @@ pub struct OperatorSettings {
     pub export_excess_solar:  bool,
     pub ev_drain_protection:  bool,
     // Time / Event Based
-    pub ready_to_drive:       bool,
-    pub ready_to_drive_time:  String,
-    pub ready_to_drive_days:  [bool; 7],
+    pub ready_to_drive:            bool,
+    pub ready_to_drive_end_time:   String,
+    #[serde(default = "default_rtd_start_time")]
+    pub ready_to_drive_start_time: String,
+    pub ready_to_drive_soc:        u8,
+    pub ready_to_drive_days:       [bool; 7],
     pub off_peak_charging:    bool,
     pub off_peak_start:       String,
     pub off_peak_end:         String,
     pub smart_charge:         bool,
     pub smart_export:         bool,
     pub smart_export_limit_w: u32,
+    pub smart_export_excess_solar: bool,
     // Charge card
     pub charge_soc_limit:     u8,
     pub charge_amps:          u8,
     pub charge_eco:           bool,
 }
+
+fn default_rtd_start_time() -> String { "--:--".to_string() }
 
 impl Default for OperatorSettings {
     fn default() -> Self {
@@ -41,15 +47,18 @@ impl Default for OperatorSettings {
             self_use:             true,
             export_excess_solar:  false,
             ev_drain_protection:  false,
-            ready_to_drive:       false,
-            ready_to_drive_time:  "08:00".to_string(),
-            ready_to_drive_days:  [false; 7],
+            ready_to_drive:            false,
+            ready_to_drive_end_time:   "08:00".to_string(),
+            ready_to_drive_start_time: "--:--".to_string(),
+            ready_to_drive_soc:        90,
+            ready_to_drive_days:       [false; 7],
             off_peak_charging:    true,
             off_peak_start:       "23:30".to_string(),
             off_peak_end:         "05:30".to_string(),
             smart_charge:         true,
             smart_export:         false,
             smart_export_limit_w: 2500,
+            smart_export_excess_solar:  false,
             charge_soc_limit:     90,
             charge_amps:          16,
             charge_eco:           false,

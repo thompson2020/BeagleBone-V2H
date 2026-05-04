@@ -291,7 +291,77 @@ async fn charge_mode(
         let op = chademo.state();
 
         let charging_current_request = match *op {
-            V2h => amps_meter_profiler(&mut last_meter, &last_amps, &*chademo).await?,
+            V2h => {
+                let sup = crate::data_io::supervisor::SUPERVISORY.read().await;
+                let ready_to_drive_active = sup.ready_to_drive_active;
+                let smart_export_active = sup.smart_export_active;
+                let smart_export_excess_solar_active = sup.smart_export_excess_solar_active;
+                let smart_charge_active = sup.smart_charge_active;
+                let off_peak_charging_active = sup.off_peak_charging_active;
+                let ev_drain_protection_active = sup.ev_drain_protection_active;
+                drop(sup);
+
+                if ready_to_drive_active {
+                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                    let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+                    let soc_target = settings.ready_to_drive_soc.min(crate::MAX_SOC);
+                    drop(settings);
+                    if soc_target <= *chademo.soc() {
+                        0.0
+                    } else {
+                        (amps as f32).min(chademo.requested_charging_amps())
+                    }
+                } else if off_peak_charging_active {
+                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                    let amps = settings.charge_amps.min(crate::MAX_AMPS);
+                    let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+                    drop(settings);
+                    if soc_limit <= *chademo.soc() {
+                        0.0
+                    } else {
+                        (amps as f32).min(chademo.requested_charging_amps())
+                    }
+                } else if smart_export_active {
+                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                    let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
+                    let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+                    let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
+                    drop(settings);
+                    if *chademo.soc() <= soc_min {
+                        // SoC floor hit: hold at 0A for remainder of slot
+                        0.0
+                    } else {
+                        // Track toward net export of export_limit_w watts; clamp to operator max discharge amps
+                        amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, export_limit_w)
+                            .await?
+                            .clamp(-(max_amps as f32), 0.0)
+                    }
+                } else if smart_charge_active {
+                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                    let amps = settings.charge_amps.min(crate::MAX_AMPS);
+                    let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+                    drop(settings);
+                    if soc_limit <= *chademo.soc() {
+                        // SoC limit hit mid-slot: hold at 0A, session stays alive until supervisor clears active
+                        0.0
+                    } else {
+                        (amps as f32).min(chademo.requested_charging_amps())
+                    }
+                } else if ev_drain_protection_active {
+                    0.0
+                } else {
+                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                    let self_use = settings.self_use;
+                    let export_excess_solar = settings.export_excess_solar;
+                    drop(settings);
+                    let amps = amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0).await?;
+                    // self_use gates discharge; export_excess_solar or smart_export_excess_solar_active gates charging
+                    amps.clamp(
+                        if self_use { f32::NEG_INFINITY } else { 0.0 },
+                        if export_excess_solar || smart_export_excess_solar_active { 0.0 } else { f32::INFINITY },
+                    )
+                }
+            }
             Discharge(d) => match handle_discharge_mode(&d, &chademo).await {
                 Some(amps) => amps,
                 None => {
@@ -307,9 +377,9 @@ async fn charge_mode(
                         continue;
                     }
                 },
-                true => amps_meter_profiler(&mut last_meter, &last_amps, &*chademo)
+                true => amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0)
                     .await?
-                    .clamp(0.0, MAX_AMPS as f32), //
+                    .clamp(0.0, MAX_AMPS as f32),
             },
             Quit | Idle => {
                 chademo.request_stop_charge();
@@ -326,9 +396,12 @@ async fn charge_mode(
             );
         }
 
-        // testing!!!!!!!
-        // chademo.update_dynamic_charge_limits(charging_current_request);
-        // let charging_current_request = chademo.x102.charging_current_request as f32;
+        // Slew-rate limit: cap the per-tick change to protect the PRE on direction reversals.
+        // 2 A/100 ms = 20 A/s  →  full -16 A→+16 A reversal takes ~1.6 s.
+        const SLEW: f32 = 2.0;
+        let charging_current_request =
+            last_amps + (charging_current_request - last_amps).clamp(-SLEW, SLEW);
+
         if last_amps != charging_current_request {
             last_amps = charging_current_request;
             log_error!(
@@ -503,13 +576,17 @@ async fn precharge(
     Err(IndraError::Timeout)
 }
 
+/// `export_limit_w` shifts the controller setpoint: pass 0.0 for normal V2H load-balance,
+/// or a positive watt value to target that many watts of net grid export.
+/// The controller drives (meter + export_limit_w) → 0, i.e. real meter → -export_limit_w.
 async fn amps_meter_profiler(
     feedback: &mut f32,
     last_setpoint_amps: &f32,
     chademo: &Chademo,
+    export_limit_w: f32,
 ) -> Result<f32, IndraError> {
     let meter = match METER.read().await.total_w {
-        Some(val) => val + METER_BIAS,
+        Some(val) => val + METER_BIAS + export_limit_w,
         None => {
             log::error!("Meter offline");
             *feedback

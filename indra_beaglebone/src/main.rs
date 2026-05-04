@@ -100,7 +100,7 @@ async fn main() -> Result<(), &'static str> {
     tokio::spawn(scheduler::init(events_rx, mode_tx.clone()));
     tokio::spawn(api::run(events_tx, mode_tx.clone()));
     tokio::spawn(data_io::db::init(10_000));
-    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone(), mode_tx.clone()));
+    tokio::spawn(mqtt::mqtt_task(app_config.mqtt.clone()));
     tokio::spawn(data_io::supervisor::supervisor_task());
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
