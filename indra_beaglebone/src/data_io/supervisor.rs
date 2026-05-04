@@ -286,6 +286,15 @@ async fn evaluate_smart_export_excess_solar() {
         return;
     }
 
+    if SUPERVISORY.read().await.smart_export_active {
+        let mut sup = SUPERVISORY.write().await;
+        if sup.smart_export_excess_solar_active {
+            log::info!("Supervisor: smart_export_excess_solar_active → false (smart_export_active)");
+            sup.smart_export_excess_solar_active = false;
+        }
+        return;
+    }
+
     let request = SUPERVISORY.read().await.smart_export_excess_solar_request;
 
     if !request {
@@ -349,6 +358,15 @@ async fn evaluate_ev_drain_protection() {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
             log::info!("Supervisor: ev_drain_protection_active → false (ready_to_drive_active)");
+            sup.ev_drain_protection_active = false;
+        }
+        return;
+    }
+
+    if SUPERVISORY.read().await.off_peak_charging_active {
+        let mut sup = SUPERVISORY.write().await;
+        if sup.ev_drain_protection_active {
+            log::info!("Supervisor: ev_drain_protection_active → false (off_peak_charging_active)");
             sup.ev_drain_protection_active = false;
         }
         return;
