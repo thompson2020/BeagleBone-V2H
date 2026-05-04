@@ -41,7 +41,6 @@ impl PreState {
 pub struct PreCharger {
     state: PreState,
     temp: f32,
-    ac_volts: f32,
     ac_amps: f32,
     dc_output_volts: f32,
     dc_output_amps: f32,
@@ -92,10 +91,6 @@ impl PreCharger {
     pub fn fan_duty(&mut self, duty: u8) {
         self.fan_duty = duty
     }
-    pub fn ac_power(&self) -> f32 {
-        self.ac_amps * self.ac_volts
-    }
-
     pub fn from_slice(&mut self, s: &[u8]) -> Result<(), IndraError> {
         if s.len() != 8 {
             return Err(IndraError::BadSlice);
@@ -130,7 +125,7 @@ impl PreCharger {
 
         match addr {
             0x2104 => self.temp = val_i16 as f32 * 0.1,
-            0x2105 => self.ac_volts = val_u16 as f32 * 0.1,
+            // 0x2105 => self.ac_volts = val_u16 as f32 * 0.1, // PRE has no AC V sensor — sourced from meter instead
             0x2106 => self.ac_amps = val_i16 as f32 * 0.1,
             0x2107 => self.dc_output_volts = val_u16 as f32 * 0.1,
             0x2108 => self.dc_output_amps = val_i16 as f32 * 0.1,
@@ -175,9 +170,6 @@ impl PreCharger {
     }
     pub fn dc_power(&self) -> f32 {
         self.dc_output_amps * self.dc_output_volts
-    }
-    pub fn get_ac_volts(&self) -> f32 {
-        self.ac_volts
     }
     pub fn get_ac_amps(&self) -> f32 {
         self.ac_amps
@@ -325,18 +317,13 @@ pub fn cmd_list_setpoints() -> [u16; 5] {
         u16::from(Register::Ping),
     ]
 }
-pub fn cmd_list_outputs() -> [u16; 6] {
+pub fn cmd_list_outputs() -> [u16; 5] {
     [
         u16::from(Register::Temp),
-        u16::from(Register::AcV),
+        // AcV (0x2105) omitted — module has no AC voltage sensor, always returns 0
         u16::from(Register::AcA),
         u16::from(Register::DcOutputV),
-        // u16::from(Register::DcBusV),
         u16::from(Register::DcOutputA),
-        // u16::from(Register::DcBusMaxVsetpoint),
-        // u16::from(Register::DcBusMaxAsetpoint),
         u16::from(Register::Enabled),
-        // u16::from(Register::Status),
-        // u16::from(Register::Ping),
     ]
 }

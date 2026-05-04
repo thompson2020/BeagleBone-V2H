@@ -17,6 +17,12 @@ pub struct MeterState {
     pub phase_w: Option<f32>,
     pub last_total_update: Option<Instant>,
     pub last_phase_update: Option<Instant>,
+
+    // Charger-dedicated sub-meter (SDM230 via mbmd)
+    pub charger_v: Option<f32>,
+    pub charger_a: Option<f32>,
+    pub charger_w: Option<f32>,
+    pub efficiency: Option<f32>,  // charger_w / dc_w * 100
 }
 
 lazy_static::lazy_static! {
@@ -151,6 +157,19 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
                             log::info!("MQTT Meter: subscribed | {}", meter_config.mqtt_meter_phase_power_topic);
                         }
                     }
+                    for topic in [
+                        &meter_config.mqtt_meter_charger_volts_topic,
+                        &meter_config.mqtt_meter_charger_current_topic,
+                        &meter_config.mqtt_meter_charger_power_topic,
+                    ] {
+                        if !topic.is_empty() {
+                            if let Err(e) = client.subscribe(topic.as_str(), QoS::AtMostOnce).await {
+                                log::error!("MQTT Meter: failed to subscribe to charger topic {topic} | {e:?}");
+                            } else {
+                                log::info!("MQTT Meter: subscribed | {topic}");
+                            }
+                        }
+                    }
                 }
                 Ok(Event::Incoming(Incoming::Publish(msg))) => {
                     handle_publish(msg, &meter_config).await;
@@ -222,6 +241,40 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig)
             m.phase_w = Some(scaled);
             m.last_phase_update = Some(Instant::now());
             log::debug!("MQTT Meter: phase power | {:.2} W", scaled);
+        }
+    }
+
+    if !cfg.mqtt_meter_charger_volts_topic.is_empty() && msg.topic == cfg.mqtt_meter_charger_volts_topic {
+        if let Ok(v) = payload.parse::<f32>() {
+            METER.write().await.charger_v = Some(v);
+            log::debug!("MQTT Meter: charger voltage | {:.3} V", v);
+        }
+    }
+
+    if !cfg.mqtt_meter_charger_current_topic.is_empty() && msg.topic == cfg.mqtt_meter_charger_current_topic {
+        if let Ok(v) = payload.parse::<f32>() {
+            METER.write().await.charger_a = Some(v);
+            log::debug!("MQTT Meter: charger current | {:.3} A", v);
+        }
+    }
+
+    if !cfg.mqtt_meter_charger_power_topic.is_empty() && msg.topic == cfg.mqtt_meter_charger_power_topic {
+        if let Ok(v) = payload.parse::<f32>() {
+            let scaled = v * cfg.mqtt_meter_charger_power_scale;
+            let dc_w = crate::pre_charger::PREDATA.lock().await.dc_power();
+            let efficiency = if dc_w.abs() > 10.0 && scaled.abs() > 10.0 {
+                if dc_w > 0.0 {
+                    Some(dc_w.abs() / scaled.abs() * 100.0)  // charging: dc out / ac in
+                } else {
+                    Some(scaled.abs() / dc_w.abs() * 100.0)  // discharging: ac out / dc in
+                }
+            } else {
+                None
+            };
+            let mut m = METER.write().await;
+            m.charger_w = Some(scaled);
+            m.efficiency = efficiency;
+            log::debug!("MQTT Meter: charger power | {:.2} W  efficiency | {:?} %", scaled, efficiency);
         }
     }
 }

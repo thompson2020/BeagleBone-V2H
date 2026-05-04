@@ -254,7 +254,7 @@ async fn charge_mode(
     let mut mode_rx = mode_rx.lock().await;
     let mut last_soc = *chademo.soc();
     let mut last_volts = 0.0;
-    let mut last_amps = 1.0;
+    let mut last_amps = 0.0;
     let mut last_meter = 0.01;
     let mut counter = 0;
     use crate::global_state::OperationMode::*;

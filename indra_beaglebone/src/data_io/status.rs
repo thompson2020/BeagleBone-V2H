@@ -17,9 +17,7 @@ pub struct ChargerSnapshot {
     pub dc_output_amps:      f32,
     pub dc_w:                f32,
     pub dc_bus_volts:        f32,
-    pub ac_volts:            f32,
     pub ac_amps:             f32,
-    pub ac_w:                f32,
     pub pre_temp:            f32,
     pub pre_fan:             u8,
     pub pre_enabled:         bool,
@@ -29,6 +27,12 @@ pub struct ChargerSnapshot {
     // From METER (grid power meter)
     pub meter_kw: f32,
     pub phase_w: Option<f32>,
+
+    // From METER (charger sub-meter: SDM230 via mbmd)
+    pub charger_v: Option<f32>,
+    pub charger_a: Option<f32>,
+    pub charger_w: Option<f32>,
+    pub efficiency: Option<f32>,
 
     // From SUPERVISORY (Home Assistant commands + internal computation)
     pub smart_charge_request: bool,
@@ -72,9 +76,7 @@ pub async fn snapshot() -> ChargerSnapshot {
         dc_output_amps:      pre.get_dc_output_amps(),
         dc_w:                pre.dc_power(),
         dc_bus_volts:        pre.get_dc_bus_volts(),
-        ac_volts:            pre.get_ac_volts(),
         ac_amps:             pre.get_ac_amps(),
-        ac_w:                pre.ac_power(),
         pre_temp:            pre.get_temp(),
         pre_fan:             pre.get_fan_percentage(),
         pre_enabled:         pre.enabled(),
@@ -83,6 +85,11 @@ pub async fn snapshot() -> ChargerSnapshot {
 
         meter_kw:        meter.total_w.unwrap_or(0.0),
         phase_w:         meter.phase_w,
+
+        charger_v:       meter.charger_v,
+        charger_a:       meter.charger_a,
+        charger_w:       meter.charger_w,
+        efficiency:      meter.efficiency,
 
         smart_charge_request:        sup.smart_charge_request,
         smart_charge_active:         sup.smart_charge_active,

@@ -80,10 +80,13 @@ pub struct MeterConfig {
     pub mqtt_meter_phase_power_topic: String,
     pub mqtt_meter_phase_power_field: String,
     pub mqtt_meter_phase_power_scale: f32,
-    pub mqtt_meter_timeout_seconds: u64,         // ← our 120 second timeout for mqtt meter readings, added to config.toml
+    pub mqtt_meter_timeout_seconds: u64,
 
-
-
+    // Charger-dedicated sub-meter (e.g. SDM230 via mbmd). Leave empty to disable.
+    pub mqtt_meter_charger_volts_topic: String,
+    pub mqtt_meter_charger_current_topic: String,
+    pub mqtt_meter_charger_power_topic: String,
+    pub mqtt_meter_charger_power_scale: f32,    // 1.0 for Watts, 1000.0 if mbmd publishes kW
 }
 
 #[derive(Debug, Deserialize, Clone)]
