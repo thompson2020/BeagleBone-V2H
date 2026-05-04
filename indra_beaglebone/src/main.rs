@@ -17,6 +17,7 @@ mod chademo;
 mod data_io;
 mod error;
 mod global_state;
+mod logger;
 mod macros;
 mod pre_charger;
 mod scheduler;
@@ -65,9 +66,9 @@ async fn main() -> Result<(), &'static str> {
         .init();
 
     #[cfg(feature = "logging-verbose")]
-    simple_logger::init_with_level(log::Level::Trace).expect("Logger init failed");
+    logger::init(log::LevelFilter::Trace).expect("Logger init failed");
     #[cfg(not(feature = "logging-verbose"))]
-    simple_logger::init_with_level(log::Level::Debug).expect("Logger init failed");
+    logger::init(log::LevelFilter::Debug).expect("Logger init failed");
 
     log::info!("=== Indra BeagleBone service starting ===");
     log::info!("Built: {}", build_time.format("%Y-%m-%d %H:%M:%S"));

@@ -12,7 +12,14 @@ use crate::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::{io::Error, time::Duration};
+use std::{
+    io::Error,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::mpsc,
@@ -52,9 +59,9 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
 
     let (write, mut read) = ws_stream.split();
 
-    // All outbound messages go through this channel so both the push task
-    // and the command handler can share the write half without a mutex.
-    let (outbox_tx, mut outbox_rx) = mpsc::channel::<Message>(32);
+    // All outbound messages go through this channel so the push task, log task,
+    // and command handler can share the write half without a mutex.
+    let (outbox_tx, mut outbox_rx) = mpsc::channel::<Message>(256);
 
     // Drain the outbox to the socket.
     let sink_task = tokio::spawn(async move {
@@ -84,6 +91,28 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
         }
     });
 
+    // Forward live log entries only when the client has opted in via StartLogs.
+    // try_send so a slow client drops log messages rather than blocking data pushes.
+    let logging_enabled = Arc::new(AtomicBool::new(false));
+    let log_tx = outbox_tx.clone();
+    let log_enabled = logging_enabled.clone();
+    let log_task = tokio::spawn(async move {
+        let Some(mut rx) = crate::logger::subscribe() else { return };
+        loop {
+            match rx.recv().await {
+                Ok(entry) => {
+                    if log_enabled.load(Ordering::Relaxed) {
+                        if let Ok(json) = serde_json::to_string(&Response::Log(entry)) {
+                            let _ = log_tx.try_send(Message::Text(json));
+                        }
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
+            }
+        }
+    });
+
     // Read loop — process incoming commands, send acks back through the outbox.
     while let Some(result) = read.next().await {
         let text = match result {
@@ -98,7 +127,7 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
         };
 
         log::debug!("WS received ({addr}): {text}");
-        match process_ws_message(&text, &events_tx, &mode_tx).await {
+        match process_ws_message(&text, &events_tx, &mode_tx, &logging_enabled).await {
             Ok(msg) => {
                 if outbox_tx.send(msg).await.is_err() {
                     break;
@@ -112,6 +141,7 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
     }
 
     log::info!("WebSocket disconnected: {addr}");
+    log_task.abort();
     push_task.abort();
     sink_task.abort();
 }
@@ -120,6 +150,7 @@ async fn process_ws_message(
     cmd: &str,
     events_tx: &EventsTx,
     mode_tx: &ChademoTx,
+    logging: &Arc<AtomicBool>,
 ) -> Result<Message, tungstenite::Error> {
     // {"cmd": {"SetMode": "V2h"}}
     // {"cmd": {"SetMode": "Idle"}}
@@ -169,6 +200,14 @@ async fn process_ws_message(
             Cmd::SetSettings(new_settings) => {
                 log::info!("[OPSETTINGS] SetSettings via WebSocket");
                 update_settings(new_settings).await;
+                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
+            }
+            Cmd::StartLogs => {
+                logging.store(true, Ordering::Relaxed);
+                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
+            }
+            Cmd::StopLogs => {
+                logging.store(false, Ordering::Relaxed);
                 Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
             }
             Cmd::GetRecords(params) => {
@@ -244,6 +283,8 @@ enum Cmd {
     GetEvents,
     GetRecords(Parameters),
     SetSettings(OperatorSettings),
+    StartLogs,
+    StopLogs,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -257,4 +298,5 @@ enum Response {
     Mode(OperationMode),
     Events(Events),
     Records(Vec<ChademoDbRow>),
+    Log(crate::logger::LogEntry),
 }
