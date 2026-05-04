@@ -67,7 +67,7 @@
 //                                                                                  data_io/db.rs
 // structure                        data_io/mqtt.rs             Sends whole struct to MQTT
 // ---------                        data_io/db.rs               Sends whole struct to db (EXCEPT meter_kw which is read from METER above and added to the db row)
-//                                  api/mod.rs                  Sends whole struct to WebSockets (GetData response)
+//                                  api/mod.rs                  Pushed to WebSocket clients every 1s
 //
 //    dc_kw: f32,                   pre_charger/pre_thread.rs   Updates using 'from_pre' from pre daata
 //    volts: f32,

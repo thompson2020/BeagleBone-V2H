@@ -6,213 +6,197 @@ use crate::{
         status::{snapshot, ChargerSnapshot},
     },
     global_state::OperationMode,
-    log_error,
     scheduler::{get_eventfile_sync, Events},
     statics::{ChademoTx, EventsTx},
     POOL,
 };
-use futures_util::{future, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::{io::Error, str::FromStr, time::Duration};
+use std::{io::Error, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
+    sync::mpsc,
     time::sleep,
 };
 use tokio_tungstenite::tungstenite::{self, Message};
 
-const BAD_ACK: &str = r#"{"ack": "err"}"#; // temp, use error handling
+const BAD_ACK: &str = r#"{"ack":"err"}"#;
+const PUSH_INTERVAL: Duration = Duration::from_secs(1);
 
 pub async fn run(events_tx: EventsTx, mode_tx: ChademoTx) -> Result<(), Error> {
-    let addr = "0.0.0.0:5555".to_string();
-    let try_socket = TcpListener::bind(&addr).await;
-    let listener = try_socket.expect("Failed to bind");
-    log::info!("WebSockets Listening on:  | {}", addr);
+    let listener = TcpListener::bind("0.0.0.0:5555").await?;
+    log::info!("WebSockets listening on: 0.0.0.0:5555");
     while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(accept_connection(
-            stream,
-            events_tx.clone(),
-            mode_tx.clone(),
-        ));
+        tokio::spawn(accept_connection(stream, events_tx.clone(), mode_tx.clone()));
     }
     Ok(())
 }
 
 async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: ChademoTx) {
-    let addr = stream
-        .peer_addr()
-        .expect("connected streams should have a peer address");
-    log::info!("New WebSocket Peer address:  | {}", addr);
+    let addr = match stream.peer_addr() {
+        Ok(a) => a,
+        Err(e) => {
+            log::error!("WS peer addr error: {e}");
+            return;
+        }
+    };
 
-    let ws_stream = tokio_tungstenite::accept_async(stream)
-        .await
-        .expect("Error during the websocket handshake occurred");
+    let ws_stream = match tokio_tungstenite::accept_async(stream).await {
+        Ok(ws) => ws,
+        Err(e) => {
+            log::error!("WS handshake failed ({addr}): {e}");
+            return;
+        }
+    };
+    log::info!("WebSocket connected: {addr}");
 
-    log::info!("New WebSocket connection:  | {}", addr);
+    let (write, mut read) = ws_stream.split();
 
-    let (write, read) = ws_stream.split();
+    // All outbound messages go through this channel so both the push task
+    // and the command handler can share the write half without a mutex.
+    let (outbox_tx, mut outbox_rx) = mpsc::channel::<Message>(32);
 
-    use tokio_tungstenite::tungstenite::Error;
-
-    let result = read
-        .try_filter(|msg| future::ready(msg.is_text() || msg.is_binary()))
-        .then(|msg| {
-            let events_tx = events_tx.clone();
-            let mode_tx = mode_tx.clone();
-
-            async move {
-                let cmd = match msg {
-                    Ok(Message::Text(cmd)) => {
-                        log::debug!("WebSocket Received: | {:?}", cmd);
-
-                        if cmd.contains("\"SetMode\"") {
-                            log::warn!("SetMode command received from client ");
-                        } else if cmd.contains("\"SetEvents\"") {
-                            log::warn!("SetEvents command received from client");
-                        }
-
-                        cmd
-                    }
-                    Ok(Message::Binary(cmd)) => {
-                        log::debug!("WebSocket Received binary data: {:x?}", cmd);
-                        String::from_utf8_lossy(&cmd).to_string()
-                    }
-                    Err(e) => {
-                        return Ok(Message::Text(format!(
-                            "{{\"ack\":\"err\",\"msg\":\"{e}\"}}"
-                        )));
-                    }
-                    _ => {
-                        return Ok(Message::Text(BAD_ACK.to_string()));
-                    }
-                };
-
-                process_ws_message(&cmd, &events_tx, &mode_tx).await
+    // Drain the outbox to the socket.
+    let sink_task = tokio::spawn(async move {
+        let mut write = write;
+        while let Some(msg) = outbox_rx.recv().await {
+            if let Err(e) = write.send(msg).await {
+                log::debug!("WS sink closed ({addr}): {e}");
+                break;
             }
-        })
-        .forward(write)
-        .await;
+        }
+    });
 
-    if let Err(e) = result {
-        log::error!("WebSocket filter error | {}", e);
+    // Push a snapshot every second without waiting for a client request.
+    let push_tx = outbox_tx.clone();
+    let push_task = tokio::spawn(async move {
+        loop {
+            let snap = snapshot().await;
+            match serde_json::to_string(&Response::Data(snap)) {
+                Ok(json) => {
+                    if push_tx.send(Message::Text(json)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(e) => log::error!("WS snapshot serialise error: {e}"),
+            }
+            sleep(PUSH_INTERVAL).await;
+        }
+    });
+
+    // Read loop — process incoming commands, send acks back through the outbox.
+    while let Some(result) = read.next().await {
+        let text = match result {
+            Ok(Message::Text(t)) => t,
+            Ok(Message::Binary(b)) => String::from_utf8_lossy(&b).to_string(),
+            Ok(Message::Close(_)) => break,
+            Ok(_) => continue,
+            Err(e) => {
+                log::debug!("WS read closed ({addr}): {e}");
+                break;
+            }
+        };
+
+        log::debug!("WS received ({addr}): {text}");
+        match process_ws_message(&text, &events_tx, &mode_tx).await {
+            Ok(msg) => {
+                if outbox_tx.send(msg).await.is_err() {
+                    break;
+                }
+            }
+            Err(e) => {
+                log::error!("WS process error ({addr}): {e}");
+                break;
+            }
+        }
     }
 
+    log::info!("WebSocket disconnected: {addr}");
+    push_task.abort();
+    sink_task.abort();
 }
-
 
 async fn process_ws_message(
     cmd: &str,
     events_tx: &EventsTx,
     mode_tx: &ChademoTx,
 ) -> Result<Message, tungstenite::Error> {
-    // {"cmd": {"SetMode": {"Charge": {"amps": 15, "eco": "", "soc_limit": 100}}}}
     // {"cmd": {"SetMode": "V2h"}}
     // {"cmd": {"SetMode": "Idle"}}
-    // {"cmd":"GetMode"}
-
-    // {"cmd": {"SetEvents": [{"time": "00:01:02", "Action": "Charge"}, {"time": "00:02:32", "Action": "V2h"}]}}
+    // {"cmd": {"SetMode": "Charge"}}
+    // {"cmd": {"SetMode": "Discharge"}}
+    // {"cmd": "GetMode"}
     // {"cmd": "GetEvents"}
-
-    // {"cmd":"GetData"} - returns current Chademo data as JSON (or BAD_ACK if lock error)
-
-    // {"cmd": "GetJson"} - original comment - can't find this in the codebase, maybe was changed to GetData? --- IGNORE ---
-    // {"cmd":{"GetRecords": {parameters...}}}
-    match serde_json::from_str::<Instruction>(&cmd) {
-    Ok(d) => match d.cmd {
+    // {"cmd": {"SetEvents": [{"time": "00:01:02", "action": "Charge"}, ...]}}
+    // {"cmd": {"SetSettings": {...}}}
+    // {"cmd": {"GetRecords": {parameters...}}}
+    match serde_json::from_str::<Instruction>(cmd) {
+        Ok(d) => match d.cmd {
             Cmd::SetMode(mode) => {
-                log::debug!("SetMode - Deserialized SetMode: {:?}", mode);   
-                let mode_tx_blocking = mode_tx.clone();
-                tokio::task::spawn_blocking(move || {
-                    log_error!(
-                        format!("Mode instruction | {:?}", mode),
-                        mode_tx_blocking.blocking_send(mode)
-                    )
-                });
-                let response = Response::Mode(mode);
-                log::info!("SetMode Response to Client | {:?}", response);
-                //log::debug!("SetMode - variable 'cmd' | {:?}", cmd );
-                //log::debug!("SetMode - d.cmd matched as Cmd::SetMode");
-                //log::debug!("SetMode - variable 'mode' | (deserialized OperationMode): {:?}", mode);
-                //log::debug!("SetMode - variable 'mode_tx' (original sender) | {:?}", mode_tx);   // may show channel info
-                Ok(Message::Text(serde_json::to_string(&response).unwrap()))
-            }
-            Cmd::GetData => {
-                let snap = snapshot().await;
-                let response = Response::Data(snap);
-                log::debug!("GetData response to client | {:?}", response);
-                Ok(Message::Text(serde_json::to_string(&response).unwrap()))
+                log::info!("WS SetMode: {mode:?}");
+                if let Err(e) = mode_tx.send(mode).await {
+                    log::error!("SetMode channel error: {e}");
+                }
+                Ok(Message::Text(
+                    serde_json::to_string(&Response::Mode(mode)).unwrap(),
+                ))
             }
             Cmd::GetMode => {
-                let mode = {
-                    let guard = CHADEMO.blocking_lock(); 
-                    *guard.state()
-                };
-                let response = Response::Mode(mode);
-
-                Ok(Message::Text(serde_json::to_string(&response).unwrap()))
+                let mode = *CHADEMO.lock().await.state();
+                Ok(Message::Text(
+                    serde_json::to_string(&Response::Mode(mode)).unwrap(),
+                ))
             }
             Cmd::SetEvents(events) => {
-                log::info!("Received SetEvents from client | {:?}", events);
-                let events_tx_c = events_tx.clone();
-                let handle = tokio::task::spawn_blocking(move || events_tx_c.blocking_send(events));
-                // if handle.is_finished() {
-                while !handle.is_finished() {
-                    // dangerous loop
+                log::info!("WS SetEvents: {events:?}");
+                if let Err(e) = events_tx.send(events).await {
+                    log::error!("SetEvents channel error: {e}");
+                    return Ok(Message::Text(BAD_ACK.to_string()));
                 }
-                Ok(Message::Text(r#"{"ack": "ok"}"#.to_string()))
+                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
             }
             Cmd::GetEvents => {
-                let events = match get_eventfile_sync() {
-                    Ok(events) => events,
-                    Err(_) => return Ok(Message::Text(BAD_ACK.to_owned())),
-                };
-                let response = Response::Events(events);
-                log::debug!("GetEvents response to client | {:?}", response);
-                Ok(Message::Text(serde_json::to_string(&response).unwrap()))
+                match get_eventfile_sync() {
+                    Ok(events) => Ok(Message::Text(
+                        serde_json::to_string(&Response::Events(events)).unwrap(),
+                    )),
+                    Err(e) => {
+                        log::error!("GetEvents error: {e:?}");
+                        Ok(Message::Text(BAD_ACK.to_string()))
+                    }
+                }
             }
             Cmd::SetSettings(new_settings) => {
-                log::info!("[OPSETTINGS] SetSettings command received via WebSocket");
+                log::info!("[OPSETTINGS] SetSettings via WebSocket");
                 update_settings(new_settings).await;
                 Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
             }
             Cmd::GetRecords(params) => {
-                let handle = async move {
-                    if let Some(db) = POOL.get() {
-                        if let Ok(rows) = db.process_request(params).await {
-                            log::info!("GetRecords response to client,  | {} rows returned", rows.len());
-                            let response = Response::Records(rows);
-                            Ok(Message::Text(serde_json::to_string(&response).unwrap()))
-                        } else {
+                if let Some(db) = POOL.get() {
+                    match db.process_request(params).await {
+                        Ok(rows) => {
+                            log::info!("GetRecords: {} rows returned", rows.len());
+                            Ok(Message::Text(
+                                serde_json::to_string(&Response::Records(rows)).unwrap(),
+                            ))
+                        }
+                        Err(e) => {
+                            log::error!("GetRecords db error: {e:?}");
                             Ok(Message::Text(BAD_ACK.to_string()))
                         }
-                    } else {
-                        Ok(Message::Text(BAD_ACK.to_string()))
                     }
-                };
-                let rt = tokio::runtime::Runtime::new().unwrap();               
-                rt.block_on(async { tokio::spawn(handle).await.unwrap() })
+                } else {
+                    log::error!("GetRecords: DB pool not initialised");
+                    Ok(Message::Text(BAD_ACK.to_string()))
+                }
             }
         },
         Err(e) => {
-            log::error!("Could not deserialise Instruction | {cmd} - {e:?}");   // Nested Tokio runtime (this is a big one) // Big Locks Do this a different way - maybe have a separate async function for processing the command that can be called from here and can use async/await properly, rather than blocking the thread with block_on?
-            Ok(Message::Text(BAD_ACK.to_owned()))
+            log::error!("WS deserialise error: {cmd} — {e:?}");
+            Ok(Message::Text(BAD_ACK.to_string()))
         }
     }
 }
-
-
-// pub enum Action {
-//     Charge,
-//     Discharge,
-//     Sleep,
-//     V2h,
-//     Eco,
-// }
-
-// #[derive(Debug, Deserialize, Serialize, PartialEq, Clone, Copy)]
-// pub struct Event {
-//     time: NaiveTime,
-//     action: Action,
-// }
 
 #[cfg(test)]
 mod test {
@@ -222,59 +206,40 @@ mod test {
         let cmd: &str = r#"{
   "cmd": {
     "SetEvents": [
-      {
-        "time": "01:02:03",
-        "action": "Sleep"
-      },
-      {
-        "time": "02:03:03",
-        "action": "Sleep"
-      }
+      {"time": "01:02:03", "action": "Sleep"},
+      {"time": "02:03:03", "action": "Sleep"}
     ]
   }
 }"#;
-        // let cmd: &str = r#"{"cmd":"GetEvents"}"#;
-        // let events = Events::default();
-        // let _cmd = Cmd::SetEvents(events);
-        // let a = Instruction { cmd: _cmd };
-        // let json: String = serde_json::to_string(&a).unwrap();
-        // println!("Outout: {json}");
-
-        let _result = match serde_json::from_str::<Instruction>(&cmd) {
+        let _result = match serde_json::from_str::<Instruction>(cmd) {
             Ok(d) => match d.cmd {
                 Cmd::GetEvents => {
                     let events = match get_eventfile_sync() {
                         Ok(events) => events,
-                        Err(e) => {
-                            panic!("1Could not deserialise Instruction {cmd:?} {e:?}")
-                        }
+                        Err(e) => panic!("GetEvents failed: {cmd:?} {e:?}"),
                     };
-                    let response = Response::Events(events);
-                    log::debug!("GetEvents response to client | {:?}", response);
-                    let output = serde_json::to_string(&response).unwrap();
-                    log::debug!("GetEvents test | {}", output); // println!("GetEvents test | {output}")
+                    let output = serde_json::to_string(&Response::Events(events)).unwrap();
+                    log::debug!("GetEvents test | {output}");
                 }
                 Cmd::SetEvents(events) => {
-                    log::info!("Received SetEvents from client | {:?}", events);
+                    log::info!("SetEvents test | {events:?}");
                 }
                 _ => {
-                    log::error!("Could not deserialise Instruction(Unknown command) | {cmd}");
+                    log::error!("Unknown command | {cmd}");
                 }
             },
             _ => {
-                log::error!("Could not deserialise Instruction(invalid JSON) | {cmd}");
+                log::error!("Invalid JSON | {cmd}");
             }
         };
-
-        // result
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 enum Cmd {
     SetMode(OperationMode),
-    GetMode,
     #[default]
-    GetData,
+    GetMode,
     SetEvents(Events),
     GetEvents,
     GetRecords(Parameters),
@@ -285,6 +250,7 @@ enum Cmd {
 struct Instruction {
     cmd: Cmd,
 }
+
 #[derive(Serialize, Debug)]
 enum Response {
     Data(ChargerSnapshot),
@@ -292,4 +258,3 @@ enum Response {
     Events(Events),
     Records(Vec<ChademoDbRow>),
 }
-
