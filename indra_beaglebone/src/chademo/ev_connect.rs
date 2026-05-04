@@ -6,7 +6,7 @@ use crate::{
     },
     data_io::panel::LedCommand,
     error::IndraError,
-    global_state::{ChargeParameters, OperationMode},
+    global_state::OperationMode,
     log_error,
     meter::METER,
     pre_charger::{
@@ -353,34 +353,49 @@ async fn charge_mode(
                     let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
                     let self_use = settings.self_use;
                     let export_excess_solar = settings.export_excess_solar;
+                    let soc_min  = settings.v2h_soc_min.max(crate::MIN_SOC);
+                    let soc_max  = settings.v2h_soc_max.min(crate::MAX_SOC);
+                    let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
                     drop(settings);
+                    let soc_at_min = *chademo.soc() <= soc_min;
+                    let soc_at_max = *chademo.soc() >= soc_max;
                     let amps = amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0).await?;
-                    // self_use gates discharge; export_excess_solar or smart_export_excess_solar_active gates charging
-                    amps.clamp(
-                        if self_use { f32::NEG_INFINITY } else { 0.0 },
-                        if export_excess_solar || smart_export_excess_solar_active { 0.0 } else { f32::INFINITY },
-                    )
+                    let upper = if export_excess_solar || smart_export_excess_solar_active || soc_at_max { 0.0 } else { max_amps as f32 };
+                    let lower = if self_use && !soc_at_min { -(max_amps as f32) } else { 0.0 };
+                    amps.clamp(lower, upper)
                 }
             }
-            Discharge(d) => match handle_discharge_mode(&d, &chademo).await {
-                Some(amps) => amps,
-                None => {
+            Discharge => {
+                let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+                let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
+                drop(settings);
+                if *chademo.soc() <= soc_min {
+                    log::info!("Discharge SoC floor hit ({}%), stopping", soc_min);
                     chademo.request_stop_charge();
                     continue;
                 }
-            },
-            Charge(c) => match c.get_eco() {
-                false => match handle_charge_mode(&c, &chademo).await {
-                    Some(amps) => amps,
-                    None => {
-                        chademo.request_stop_charge();
-                        continue;
-                    }
-                },
-                true => amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0)
-                    .await?
-                    .clamp(0.0, MAX_AMPS as f32),
-            },
+                -(max_amps as f32).min(chademo.requested_discharging_amps())
+            }
+            Charge => {
+                let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+                let amps = settings.charge_amps.min(crate::MAX_AMPS);
+                let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+                let eco = settings.charge_eco;
+                drop(settings);
+                if soc_limit <= *chademo.soc() {
+                    log::info!("Charge SoC limit hit ({}%), stopping", soc_limit);
+                    chademo.request_stop_charge();
+                    continue;
+                }
+                if eco {
+                    amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0)
+                        .await?
+                        .clamp(0.0, MAX_AMPS as f32)
+                } else {
+                    (amps as f32).min(chademo.requested_charging_amps())
+                }
+            }
             Quit | Idle => {
                 chademo.request_stop_charge();
                 continue;
@@ -421,28 +436,6 @@ async fn charge_mode(
         }
     };
     Ok(exit_reason)
-}
-
-async fn handle_charge_mode(cp: &ChargeParameters, chademo: &Chademo) -> Option<f32> {
-    let mut amps = Some((cp.get_amps() as f32).min(chademo.requested_charging_amps()));
-    if let Some(soc_limit) = cp.get_soc_limit() {
-        if &soc_limit <= chademo.soc() {
-            amps = None;
-            log::info!("Charge to SoC limit hit, charging disabled")
-        }
-    }
-    amps
-}
-async fn handle_discharge_mode(cp: &ChargeParameters, chademo: &Chademo) -> Option<f32> {
-    // note negative Some()
-    let mut amps = Some(-(cp.get_amps() as f32).min(chademo.requested_discharging_amps()));
-    if let Some(soc_limit) = cp.get_soc_limit() {
-        if &soc_limit <= chademo.soc() {
-            amps = None;
-            log::info!("Charge to SoC limit hit, charging disabled")
-        }
-    }
-    amps
 }
 
 async fn init_pre(

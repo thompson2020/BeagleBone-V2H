@@ -1,6 +1,6 @@
 use crate::{
     error::IndraError,
-    global_state::{ChargeParameters, OperationMode},
+    global_state::OperationMode,
     log_error,
     statics::{ChademoTx, EventsRx},
     MAX_AMPS,
@@ -29,33 +29,17 @@ pub enum Action {
 pub struct Event {
     time: NaiveTime,
     action: Action,
-    #[serde(default)]
-    params: Option<ChargeParameters>,   
-
-    // You can add other fields here as needed
 }
 impl Into<OperationMode> for Event {
     fn into(self) -> OperationMode {
         use OperationMode::*;
 
         match self.action {
-            Action::Charge => {
-                Charge(self.params.unwrap_or_default())
-            }
-
-            Action::Discharge => {
-                Charge(self.params.unwrap_or_default())
-            }
-
+            Action::Charge => Charge,
+            Action::Discharge => Discharge,
             Action::Sleep => Idle,
-
             Action::V2h => V2h,
-
-            Action::Eco => {
-                let mut cp = ChargeParameters::default();
-                cp.set_eco(true);
-                Charge(cp)
-            }
+            Action::Eco => Charge,
         }
     }
 }
@@ -67,9 +51,8 @@ impl Event {
         let secs = hh * 3600 + mm * 60 + ss;
         let time = NaiveTime::from_num_seconds_from_midnight_opt(secs, 0).unwrap();
         Self {
-            time: time,
+            time,
             action: Action::Sleep,
-            params: None,   
         }
     }
 }

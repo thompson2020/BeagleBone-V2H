@@ -2,7 +2,7 @@
 use crate::{
     chademo::state::{BOOSTPIN, ONOFFPIN}, //ChargerState,
     error::IndraError,
-    global_state::{ChargeParameters, OperationMode},
+    global_state::OperationMode,
     log_error,
     // eventbus::{Event, EvtBus},
     // log_error,
@@ -103,7 +103,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                 log::debug!("Panel: Boost Button Pressed" );
                 let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
                 log::debug!("Panel: Boost Button - Current Mode: {:?}", current_mode);
-                if matches!(current_mode, OperationMode::Charge(_) ) {
+                if matches!(current_mode, OperationMode::Charge) {
                   log::debug!("Panel: Boost Button - Changing to Idle");
                     let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
@@ -113,10 +113,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                     }
                 } else {
                     log::debug!("Panel: Boost Button - Changing to Charge");
-                    let mut params = ChargeParameters::default();
-                    params.set_amps(16);
-                    params.set_soc_limit(95);
-                    let mode = OperationMode::Charge(params);
+                    let mode = OperationMode::Charge;
                     log::debug!("Smart Charge mode created | {:?}", mode);
                     log::warn!("Panel: MODE CHANGED TO : {:?}", mode);
                     if let Err(e) = mode_tx.send(mode).await {
@@ -132,7 +129,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
                 log::debug!("Panel: OnOff Button Pressed" );
                 let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
                 log::debug!("Panel: OnOff Button - Current Mode: {:?}", current_mode);
-                if matches!(current_mode, OperationMode::Charge(_) | OperationMode::Discharge(_) | OperationMode::V2h ) {
+                if matches!(current_mode, OperationMode::Charge | OperationMode::Discharge | OperationMode::V2h) {
                     log::debug!("Panel: OnOff Button - Changing to Idle");
                     let mode = OperationMode::Idle;
                     log::debug!("Smart Charge mode created | {:?}", mode);
@@ -347,7 +344,7 @@ impl Into<u8> for State {
 impl From<&OperationMode> for State {
     fn from(value: &OperationMode) -> Self {
         match value {
-            OperationMode::Charge(_) => State::Charging,
+            OperationMode::Charge => State::Charging,
             OperationMode::V2h => State::V2h,
             _ => State::Idle,
         }

@@ -1,5 +1,5 @@
 use crate::{
-    global_state::{ChargeParameters, OperationMode},
+    global_state::OperationMode,
     log_error,
     pre_charger::PreCommand,
     statics::{ChademoTx, PreTx},
@@ -30,7 +30,7 @@ pub async fn scan_kb(pre_tx: PreTx, mode_tx: ChademoTx) {
             }
             99 => {
                 // "c" manual charge
-                log_error!("kb", mode_tx.send(OperationMode::Charge(ChargeParameters::default())).await);
+                log_error!("kb", mode_tx.send(OperationMode::Charge).await);
             }
             113 => {
                 // "q" quit

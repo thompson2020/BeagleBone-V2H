@@ -66,6 +66,28 @@ impl Default for OperatorSettings {
     }
 }
 
+impl OperatorSettings {
+    pub fn validate_and_clamp(&mut self) {
+        let max_soc  = crate::MAX_SOC;
+        let min_soc  = crate::MIN_SOC;
+        let max_amps = crate::MAX_AMPS;
+
+        // SoC bounds
+        self.v2h_soc_min       = self.v2h_soc_min.clamp(min_soc, max_soc);
+        self.v2h_soc_max       = self.v2h_soc_max.clamp(min_soc, max_soc);
+        if self.v2h_soc_min >= self.v2h_soc_max {
+            log::warn!("{TAG} v2h_soc_min ({}) >= v2h_soc_max ({}) — pulling min down", self.v2h_soc_min, self.v2h_soc_max);
+            self.v2h_soc_min = self.v2h_soc_max.saturating_sub(5).max(min_soc);
+        }
+        self.charge_soc_limit  = self.charge_soc_limit.clamp(min_soc, max_soc);
+        self.ready_to_drive_soc = self.ready_to_drive_soc.clamp(min_soc, max_soc);
+
+        // Amps bounds
+        self.v2h_max_amps = self.v2h_max_amps.min(max_amps);
+        self.charge_amps  = self.charge_amps.min(max_amps);
+    }
+}
+
 fn to_json(settings: &OperatorSettings) -> String {
     serde_json::to_string(settings).unwrap_or_else(|_| "<serialise error>".to_string())
 }
@@ -79,7 +101,8 @@ lazy_static! {
 pub async fn load() -> OperatorSettings {
     match tokio::fs::read_to_string(SETTINGS_FILE).await {
         Ok(contents) => match serde_json::from_str::<OperatorSettings>(&contents) {
-            Ok(settings) => {
+            Ok(mut settings) => {
+                settings.validate_and_clamp();
                 log::info!("{TAG} loaded from {} | {}", SETTINGS_FILE, to_json(&settings));
                 settings
             }
@@ -112,7 +135,8 @@ async fn save(settings: &OperatorSettings) -> Result<(), IndraError> {
 
 /// Single entry point for all settings changes.
 /// Call from both the WebSocket handler and (future) MQTT handler.
-pub async fn update(new_settings: OperatorSettings) {
+pub async fn update(mut new_settings: OperatorSettings) {
+    new_settings.validate_and_clamp();
     log::info!("{TAG} update received | {}", to_json(&new_settings));
     *OPERATOR_SETTINGS.write().await = new_settings.clone();
     if let Err(e) = save(&new_settings).await {
