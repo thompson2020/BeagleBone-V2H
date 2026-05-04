@@ -58,6 +58,10 @@ const UPPERBAR: u8 = 6;
 const LOWERBAR: u8 = 8;
 const ADDR: u8 = 0x60;
 
+// Logo blink states — use PWM0 (slow) bit-pair (10) per colour channel
+const LOGO_RED_BLINK:   u8 = 2 << 6;             // slow blink red only
+const LOGO_AMBER_BLINK: u8 = (2 << 6) | (2 << 4); // slow blink red+green = amber
+
 #[derive(Copy, Clone, Debug)]
 pub enum ButtonTriggered {
     OnOff,
@@ -154,7 +158,7 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
     Ok(())
 }
 
-pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Result<(), IndraError> {
+pub async fn panel_event_listener(led_rx: LedRx, mode_tx: ChademoTx) -> Result<(), IndraError> {
     log::info!("Starting thread: panel_event_listener  | {}", tokio::task::id());
     let dev = I2cdev::new("/dev/i2c-2").expect("Cannot access /dev/i2c-2");
     let mut pca = Pca9552::new(dev);
@@ -162,8 +166,13 @@ pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Resu
         log::error!("I2C init failed | {e:?}")
     };
 
-    tokio::spawn(async move {
-        while let Some(event) = led_rx.recv().await {
+    // Dedicated OS thread: all I2C writes are blocking, so this belongs on a
+    // real thread rather than a Tokio async task. blocking_recv() parks the
+    // thread between messages without burning CPU.
+    std::thread::spawn(move || {
+        let mut pca = pca;
+        let mut led_rx = led_rx;
+        while let Some(event) = led_rx.blocking_recv() {
             let result = match event {
                 LedCommand::Logo(colour) => pca.logo_led(colour),
                 LedCommand::Buttons(b) => match b {
@@ -178,7 +187,6 @@ pub async fn panel_event_listener(mut led_rx: LedRx, mode_tx: ChademoTx) -> Resu
             if let Err(e) = result {
                 log::error!("panel_event_listener Error | {e:?}")
             }
-            
         }
     });
     log::debug!("Starting buttons event listener");
@@ -226,7 +234,7 @@ where
             [PWM0, PWM0_VAL],
             [PCS1, PCS1_VAL],
             [PWM1, PWM1_VAL],
-            [LOGO, RED],
+            [LOGO, LOGO_RED_BLINK],
             [BUTTONS, self.buttons],
             [UPPERBAR, self.upper],
             [LOWERBAR, self.lower],
@@ -321,32 +329,37 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum State {
-    Error,
-    Idle,
-    Charging,
-    V2h,
-    Off,
+    Initialising, // slow blink red — startup before ready
+    MeterStale,   // slow blink amber — meter data lost
+    Error,        // solid red — CAN fault or EV fault
+    Idle,         // solid white
+    Charging,     // solid blue — Charge or Discharge
+    V2h,          // solid green
+    Off,          // dark
 }
 
 impl Into<u8> for State {
     fn into(self) -> u8 {
         match self {
-            State::Error => RED,
-            State::Idle => WHITE,
-            State::Charging => BLUE,
-            State::V2h => GREEN,
-            State::Off => ALL_ON, // off really
+            State::Initialising => LOGO_RED_BLINK,
+            State::MeterStale   => LOGO_AMBER_BLINK,
+            State::Error        => RED,
+            State::Idle         => WHITE,
+            State::Charging     => BLUE,
+            State::V2h          => GREEN,
+            State::Off          => ALL_ON,
         }
     }
 }
 impl From<&OperationMode> for State {
     fn from(value: &OperationMode) -> Self {
         match value {
-            OperationMode::Charge => State::Charging,
-            OperationMode::V2h => State::V2h,
-            _ => State::Idle,
+            OperationMode::Charge | OperationMode::Discharge => State::Charging,
+            OperationMode::V2h        => State::V2h,
+            OperationMode::Uninitalised => State::Initialising,
+            _                         => State::Idle,
         }
     }
 }

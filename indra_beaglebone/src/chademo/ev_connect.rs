@@ -35,6 +35,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 
     // let operational_mode = OPERATIONAL_MODE.clone();
     let mut chademo = Chademo::new();
+    let mut last_logo = crate::data_io::panel::State::Off; // sentinel — forces first send
     let t100ms = Duration::from_millis(100);
     let predata = PREDATA.clone();
     let (pre_tx, pre_rx) = statics::pre_channel();
@@ -49,7 +50,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         }
         reset_gpio_state(&mut chademo);
         chademo.set_state(OperationMode::Idle);
-        update_panel_leds(&led_tx, &chademo).await;
+        update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
         update_chademo_mutex(&chademo).await;
         {
             // fan fudge
@@ -62,7 +63,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             if let Some(state) = mode_rx.clone().lock().await.recv().await {
                 chademo.set_state(state);
                 log::info!("EV received new mode: {:?}", state);
-                update_panel_leds(&led_tx, &chademo).await;
+                update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
                 update_chademo_mutex(&chademo).await;
                 if !(state.is_v2h() || state.is_charge()) {
                     continue;
@@ -75,12 +76,14 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 
         if DUMMYMODE {
             log::info!("            Entering charge loop!");
-            let _ = match charge_mode(&mut chademo, &mut can, &pre_tx, &led_tx, mode_rx.clone())
+            let _ = match charge_mode(&mut chademo, &mut can, &pre_tx, &led_tx, mode_rx.clone(), &mut last_logo)
                 .await
             {
                 Ok(reason) => reason,
                 Err(e) => {
-                    log::error!("Bailed out of main charge | {e:?}");
+                    log::error!("Bailed out of main charge (dummy) | {e:?}");
+                    log_error!("LED error", led_tx.send(LedCommand::Logo(crate::data_io::panel::State::Error)).await);
+                    last_logo = crate::data_io::panel::State::Error;
                     OperationMode::Idle
                 }
             };
@@ -95,7 +98,8 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         chademo.pins().pre_ac.set_value(1).unwrap();
         if let Err(e) = init_pre(&predata, t100ms, &pre_tx).await {
             log::error!("Pre init failed - | {e:?}");
-
+            log_error!("LED error", led_tx.send(LedCommand::Logo(crate::data_io::panel::State::Error)).await);
+            last_logo = crate::data_io::panel::State::Error;
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
             update_chademo_mutex(&chademo).await;
@@ -110,7 +114,8 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         log::info!("Check can frames & Wait for K line");
         if let Err(e) = k_line(&mut can, &mut chademo).await {
             log::error!("K line init failed - is car connected? | {e:?}");
-
+            log_error!("LED error", led_tx.send(LedCommand::Logo(crate::data_io::panel::State::Error)).await);
+            last_logo = crate::data_io::panel::State::Error;
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
             update_chademo_mutex(&chademo).await;
@@ -130,7 +135,8 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         chademo.charge_start();
         if let Err(e) = precharge(&mut can, &mut chademo, &pre_tx, &predata).await {
             log::error!("precharge & contactor init failed - should be catastropic and hang | {e:?}");
-
+            log_error!("LED error", led_tx.send(LedCommand::Logo(crate::data_io::panel::State::Error)).await);
+            last_logo = crate::data_io::panel::State::Error;
             chademo.set_state(OperationMode::Idle);
             reset_gpio_state(&mut chademo);
             update_chademo_mutex(&chademo).await;
@@ -140,15 +146,17 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         chademo.x109.status = X109Status::from(0x05);
         assert!(chademo.x109.status.status_vehicle_connector_lock);
         assert!(chademo.x109.status.status_station);
-        update_panel_leds(&led_tx, &chademo).await;
+        update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
         // update_chademo_mutex(&chademo).await;
 
         log::info!("            Entering charge loop!");
         let exit_reason =
-            match charge_mode(&mut chademo, &mut can, &pre_tx, &led_tx, mode_rx.clone()).await {
+            match charge_mode(&mut chademo, &mut can, &pre_tx, &led_tx, mode_rx.clone(), &mut last_logo).await {
                 Ok(reason) => reason,
                 Err(e) => {
                     log::error!("Bailed out of main charge | {e:?}");
+                    log_error!("LED error", led_tx.send(LedCommand::Logo(crate::data_io::panel::State::Error)).await);
+                    last_logo = crate::data_io::panel::State::Error;
                     OperationMode::Idle
                 }
             };
@@ -241,6 +249,7 @@ async fn charge_mode(
     pre_tx: &tokio::sync::mpsc::Sender<PreCommand>,
     led_tx: &tokio::sync::mpsc::Sender<LedCommand>,
     mode_rx: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<OperationMode>>>,
+    last_logo: &mut crate::data_io::panel::State,
 ) -> Result<OperationMode, IndraError> {
     let mut mode_rx = mode_rx.lock().await;
     let mut last_soc = *chademo.soc();
@@ -279,7 +288,7 @@ async fn charge_mode(
         {
             // listen for incomming mode changes
             if let Ok(op) = mode_rx.try_recv() {
-                update_panel_leds(&led_tx, &chademo).await;
+                update_panel_leds(&led_tx, &chademo, last_logo).await;
                 log::info!("New CHAdeMO mode received | {op:?}");
 
                 chademo.set_state(op);
@@ -427,12 +436,12 @@ async fn charge_mode(
             );
 
             update_chademo_mutex(&*chademo).await;
-            update_panel_leds(&led_tx, &chademo).await
+            update_panel_leds(&led_tx, &chademo, last_logo).await
         }
         if &last_soc != chademo.soc() {
             last_soc = *chademo.soc();
             update_chademo_mutex(&*chademo).await;
-            update_panel_leds(&led_tx, &chademo).await
+            update_panel_leds(&led_tx, &chademo, last_logo).await
         }
     };
     Ok(exit_reason)
@@ -633,27 +642,38 @@ async fn update_chademo_mutex(chademo: &Chademo) {
     *crate::chademo::state::CHADEMO.lock().await = *chademo;
 }
 
-async fn update_panel_leds(led_tx: &LedTx, chademo: &Chademo) {
-    // Use a match statement to determine the LED state
-    let led_state = match chademo.state() {
-        OperationMode::Idle | OperationMode::Quit => {
-            // Remove status bars from led panel
-            LedCommand::SocBar(0)
-        }
+async fn update_panel_leds(led_tx: &LedTx, chademo: &Chademo, last_logo: &mut crate::data_io::panel::State) {
+    use crate::data_io::panel::State;
+
+    // Priority: EV fault > meter stale > operating mode
+    let meter = *crate::data_io::meter::METER.read().await;
+    let meter_stale = meter.total_w.is_none() && meter.last_total_update.is_some();
+
+    let logo = if chademo.fault() {
+        State::Error
+    } else if meter_stale {
+        State::MeterStale
+    } else {
+        State::from(chademo.state())
+    };
+    if logo != *last_logo {
+        log_error!("Update LED Logo", led_tx.send(LedCommand::Logo(logo)).await);
+        *last_logo = logo;
+    }
+
+    // Bars
+    let bar_cmd = match chademo.state() {
+        OperationMode::Idle | OperationMode::Quit => LedCommand::SocBar(0),
         _ => {
-            // Calculate amps as a percentage vs. max amps
-            let amps = (chademo.output_amps().abs() as u8).min(MAX_AMPS) as u32 * 100;
+            let amps_pct = ((chademo.output_amps().abs() as u32)
+                .min(MAX_AMPS as u32) * 100
+                / MAX_AMPS as u32) as u8;
             let neg = chademo.output_amps().is_negative();
-            log_error!(
-                "Update LED State",
-                led_tx.send(LedCommand::EnergyBar(amps as u8, neg)).await
-            );
-            LedCommand::SocBar(*chademo.soc()) // Assuming SocBar should be sent in this case
+            log_error!("Update LED EnergyBar", led_tx.send(LedCommand::EnergyBar(amps_pct, neg)).await);
+            LedCommand::SocBar(*chademo.soc())
         }
     };
-
-    // Send the LED state using a single call to log_error!
-    log_error!("Update LED State", led_tx.send(led_state).await);
+    log_error!("Update LED SocBar", led_tx.send(bar_cmd).await);
 }
 
 #[cfg(test)]
