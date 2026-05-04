@@ -95,8 +95,34 @@ async fn main() -> Result<(), &'static str> {
     let _pca9552_reset = state::pin_init_out_high(state::RESETPCAPIN).unwrap();
     let _master = state::pin_init_out_high(state::MASTERCONTACTOR).unwrap();
 
-    tokio::spawn(meter::meter(app_config.meter.clone(), mode_tx.clone())); // rtu over tcp SDM230 modbus meter
+    // Start LED handler early so the E-Stop check below can show status on the panel
     tokio::spawn(panel::panel_event_listener(led_rx, mode_tx.clone()));
+    tokio::time::sleep(Duration::from_millis(300)).await; // allow PCA9552 init to complete
+
+    // If E-Stop is still held from a previous trip, park here until it is released.
+    // With Restart=always the service restarts after an E-Stop exit; this block
+    // prevents an infinite restart loop by waiting for the pin to go high first.
+    {
+        use sysfs_gpio::{Direction, Pin};
+        let estop = Pin::new(chademo::state::ESTOPPIN);
+        let _ = estop.export();
+        let _ = estop.set_direction(Direction::In);
+        if estop.get_value().unwrap_or(1) == 0 {
+            log::warn!("[ESTOP] E-Stop held at startup — waiting for release (red blink on panel)");
+            let _ = led_tx.send(panel::LedCommand::Logo(panel::State::Initialising)).await;
+            loop {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                if estop.get_value().unwrap_or(0) == 1 {
+                    log::info!("[ESTOP] E-Stop released — resuming startup");
+                    break;
+                }
+            }
+        }
+        let _ = estop.unexport();
+    }
+
+    tokio::spawn(meter::meter(app_config.meter.clone(), mode_tx.clone())); // rtu over tcp SDM230 modbus meter
+    tokio::spawn(panel::monitor_estop(led_tx.clone(), mode_tx.clone()));
     tokio::spawn(scheduler::init(events_rx, mode_tx.clone()));
     tokio::spawn(api::run(events_tx, mode_tx.clone()));
     tokio::spawn(data_io::db::init(10_000));
@@ -116,6 +142,15 @@ async fn main() -> Result<(), &'static str> {
             log::warn!("CTRL-C caught again - forcing exit");
             std::process::exit(1)
         }
+    });
+
+    let mut sigterm =
+        signal(SignalKind::terminate()).expect("Failed to create SIGTERM signal handler");
+    let eb = mode_tx.clone();
+    tokio::spawn(async move {
+        sigterm.recv().await;
+        log::warn!("SIGTERM received - sending Quit for clean shutdown");
+        let _ = eb.send(OperationMode::Quit).await;
     });
 
     // Final loop

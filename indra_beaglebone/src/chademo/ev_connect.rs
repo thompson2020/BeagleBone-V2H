@@ -65,11 +65,11 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
                 log::info!("EV received new mode: {:?}", state);
                 update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
                 update_chademo_mutex(&chademo).await;
-                if !(state.is_v2h() || state.is_charge()) {
-                    continue;
-                }
                 if matches!(state, OperationMode::Quit) {
                     return Ok(());
+                }
+                if !(state.is_v2h() || state.is_charge()) {
+                    continue;
                 }
             }
         }
@@ -266,8 +266,8 @@ async fn charge_mode(
             recv_send(can, chademo, false).await?;
             if !chademo.status_vehicle_charging() {
                 log::warn!("EV stopped charge");
-                dbg!(&chademo);
-                break Idle;
+                let state = *chademo.state();
+                break if state.is_quit() { state } else { Idle };
             }
         };
 

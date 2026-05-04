@@ -158,6 +158,45 @@ async fn monitor_pin(pin: Pin, mode_tx: ChademoTx) -> Result<(), sysfs_gpio::Err
     Ok(())
 }
 
+pub async fn monitor_estop(led_tx: LedTx, mode_tx: ChademoTx) {
+    use crate::chademo::state::{CHADEMO, ESTOPPIN};
+    let pin = Pin::new(ESTOPPIN);
+    if let Err(e) = pin.export() {
+        log::warn!("[ESTOP] Could not export GPIO{ESTOPPIN}: {e:?} — E-Stop monitoring inactive");
+        return;
+    }
+    if pin.set_direction(Direction::In).is_err() || pin.set_edge(Edge::BothEdges).is_err() {
+        log::warn!("[ESTOP] Could not configure GPIO{ESTOPPIN} — E-Stop monitoring inactive");
+        return;
+    }
+    let mut stream = match pin.get_value_stream() {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("[ESTOP] Could not get value stream for GPIO{ESTOPPIN}: {e:?}");
+            return;
+        }
+    };
+    log::info!("[ESTOP] Monitoring GPIO{ESTOPPIN} (P8_11)");
+    while let Some(evt) = stream.next().await {
+        match evt {
+            Ok(0) => {
+                // HIGH -> LOW: E-Stop pressed and latched
+                log::error!("[ESTOP] *** E-STOP PRESSED — sending Quit ***");
+                let _ = led_tx.send(LedCommand::Logo(State::Initialising)).await;
+                let _ = mode_tx.send(OperationMode::Quit).await;
+            }
+            Ok(_) => {
+                // LOW -> HIGH: released while service running (startup handles the normal case)
+                log::warn!("[ESTOP] E-Stop released");
+                let mode = *CHADEMO.lock().await.state();
+                let _ = led_tx.send(LedCommand::Logo(State::from(&mode))).await;
+            }
+            Err(e) => log::error!("[ESTOP] GPIO{ESTOPPIN} stream error: {e:?}"),
+        }
+    }
+    log::error!("[ESTOP] GPIO{ESTOPPIN} stream ended unexpectedly");
+}
+
 pub async fn panel_event_listener(led_rx: LedRx, mode_tx: ChademoTx) -> Result<(), IndraError> {
     log::info!("Starting thread: panel_event_listener  | {}", tokio::task::id());
     let dev = I2cdev::new("/dev/i2c-2").expect("Cannot access /dev/i2c-2");
