@@ -29,6 +29,8 @@ use tokio::{
 use tokio_socketcan::{CANFrame, CANSocket};
 
 const DUMMYMODE: bool = false;
+const KP: f32 = 0.45;
+const EFF: f32 = 0.9;
 
 pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError> {
     log::info!("Starting thread: EV ");
@@ -258,11 +260,9 @@ async fn charge_mode(
     let mut last_meter = 0.01;
     let mut counter = 0;
 
-    // PID state — shared across all meter-based V2h sub-modes.
-    let mut dv: f32 = 0.0;        // Desired Value: target DC output amps for the PRE
-    let mut inner_tick: u32 = 0;  // 100 ms tick counter; inner loop fires every 10 ticks (1 s)
-    const KP: f32 = 0.45;   // Proportional gain — used in both the outer and inner loops
-    const EFF: f32 = 0.9;   // Assumed charger efficiency (90%)
+    // PID state — shared across all meter-based modes.
+    let mut dv: f32 = 0.0;
+    let mut inner_tick: u32 = 0;
 
     use crate::global_state::OperationMode::*;
 
@@ -308,184 +308,7 @@ async fn charge_mode(
         let op = chademo.state();
 
         let charging_current_request = match *op {
-            V2h => {
-                let sup = crate::data_io::supervisor::SUPERVISORY.read().await;
-                let ready_to_drive_active = sup.ready_to_drive_active;
-                let smart_export_active = sup.smart_export_active;
-                let smart_export_excess_solar_active = sup.smart_export_excess_solar_active;
-                let smart_charge_active = sup.smart_charge_active;
-                let off_peak_charging_active = sup.off_peak_charging_active;
-                let ev_drain_protection_active = sup.ev_drain_protection_active;
-                drop(sup);
-
-                if ready_to_drive_active {
-                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
-                    let soc_target = settings.ready_to_drive_soc.min(crate::MAX_SOC);
-                    drop(settings);
-                    if soc_target <= *chademo.soc() {
-                        0.0
-                    } else {
-                        (amps as f32).min(chademo.requested_charging_amps())
-                    }
-                } else if off_peak_charging_active {
-                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    // Cap by both the charge slider AND the V2H session cap — whichever is lower.
-                    // v2h_max_amps is the physical limit for all current flows in this session.
-                    let amps = settings.charge_amps.min(settings.v2h_max_amps).min(crate::MAX_AMPS);
-                    let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
-                    drop(settings);
-                    let soc = *chademo.soc();
-                    // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
-                    // last_amps == 0.0 means we were already stopped — stay stopped until below deadband.
-                    if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) {
-                        0.0
-                    } else {
-                        (amps as f32).min(chademo.requested_charging_amps())
-                    }
-                } else if smart_export_active {
-                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
-                    let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
-                    let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
-                    drop(settings);
-                    if *chademo.soc() <= soc_min {
-                        // SoC floor hit — clear DV so the inner loop does not pursue a stale target
-                        dv = 0.0;
-                        0.0
-                    } else {
-                        let lower = -(max_amps as f32);
-
-                        // PV (Process Variable): actual DC amps from PRE hardware (100 ms fresh).
-                        // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
-                        // stale x109.output_voltage which is only set once during precharge.
-                        let pre = PREDATA.lock().await;
-                        let pv = pre.get_dc_output_amps();
-                        let dc_v = pre.get_dc_output_volts().max(10.0);
-                        drop(pre);
-
-                        // OUTER LOOP — fires once per new meter reading (typically every 10–30 s).
-                        //
-                        // Converts the watt imbalance into a DC amp target (DV).
-                        // export_limit_w shifts the balance point so the meter settles at
-                        // -export_limit_w (i.e. exporting that many watts) rather than zero.
-                        //
-                        // Efficiency correction (90% assumed):
-                        //   meter > 0 (import / need more discharge): DC amps = AC watts / (η × V)
-                        //   meter < 0 (export / need less discharge): DC amps = AC watts × η / V
-                        //
-                        // DV = PV − adjusted_error_amps   (clamped to discharge-only range)
-                        if let Some(meter_raw) = METER.read().await.total_w {
-                            let meter = meter_raw + METER_BIAS + export_limit_w;
-                            if meter != last_meter {
-                                last_meter = meter;
-                                let raw_error = meter / dc_v;
-                                let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
-                                dv = (pv - adj_error).clamp(lower, 0.0);
-                                log::info!("Outer loop (export) | meter={:.1}W limit={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
-                                    meter_raw, export_limit_w, pv, adj_error, dv);
-                            }
-                        }
-
-                        // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
-                        //
-                        // Proportional step:  SP = last_SP + KP × (DV − PV)
-                        //
-                        // Because SP accumulates each tick, this acts as an integrator on the
-                        // DC amps error — it drives PV to DV with zero steady-state error,
-                        // using only what the PRE is actually delivering, not what was requested.
-                        if inner_tick >= 10 {
-                            inner_tick = 0;
-                            let error = dv - pv;
-                            let proportional = KP * error;
-                            let sp = (last_amps + proportional).clamp(lower, 0.0);
-                            log::debug!("Inner loop (export) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
-                                pv, dv, error, proportional, sp);
-                            sp
-                        } else {
-                            last_amps // inner loop has not fired this tick — hold setpoint
-                        }
-                    }
-                } else if smart_charge_active {
-                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    let amps = settings.charge_amps.min(crate::MAX_AMPS);
-                    let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
-                    drop(settings);
-                    if soc_limit <= *chademo.soc() {
-                        // SoC limit hit mid-slot: hold at 0A, session stays alive until supervisor clears active
-                        0.0
-                    } else {
-                        (amps as f32).min(chademo.requested_charging_amps())
-                    }
-                } else if ev_drain_protection_active {
-                    0.0
-                } else {
-                    let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    let self_use = settings.self_use;
-                    let export_excess_solar = settings.export_excess_solar;
-                    let soc_min  = settings.v2h_soc_min.max(crate::MIN_SOC);
-                    let soc_max  = settings.v2h_soc_max.min(crate::MAX_SOC);
-                    let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
-                    drop(settings);
-                    let soc_at_min = *chademo.soc() <= soc_min;
-                    let soc_at_max = *chademo.soc() >= soc_max;
-
-                    // Permitted range for this tick — derived from SoC position and operator flags
-                    let upper = if export_excess_solar || smart_export_excess_solar_active || soc_at_max { 0.0 } else { max_amps as f32 };
-                    let lower = if self_use && !soc_at_min { -(max_amps as f32) } else { 0.0 };
-
-                    // Re-clamp DV whenever SoC or settings have narrowed the permitted range
-                    // (e.g. SoC hit the ceiling — we must not target charging any further).
-                    dv = dv.clamp(lower, upper);
-
-                    // PV (Process Variable): actual DC amps from PRE hardware (100 ms fresh).
-                    // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
-                    // stale x109.output_voltage which is only set once during precharge.
-                    let pre = PREDATA.lock().await;
-                    let pv = pre.get_dc_output_amps();
-                    let dc_v = pre.get_dc_output_volts().max(10.0);
-                    drop(pre);
-
-                    // OUTER LOOP — fires once per new meter reading.
-                    //
-                    // Converts the grid watt imbalance into a DC amp target (DV).
-                    //
-                    // Efficiency correction (90% assumed):
-                    //   meter > 0 (importing / discharge direction): DC amps = AC watts / (η × V)
-                    //   meter < 0 (exporting / charge direction):    DC amps = AC watts × η / V
-                    //
-                    // DV = PV − adjusted_error_amps   (clamped to permitted charge/discharge range)
-                    if let Some(meter_raw) = METER.read().await.total_w {
-                        let meter = meter_raw + METER_BIAS;
-                        if meter != last_meter {
-                            last_meter = meter;
-                            let raw_error = meter / dc_v;
-                            let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
-                            dv = (pv - adj_error).clamp(lower, upper);
-                            log::info!("Outer loop (V2h) | meter={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
-                                meter_raw, pv, adj_error, dv);
-                        }
-                    }
-
-                    // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
-                    //
-                    // Proportional step:  SP = last_SP + KP × (DV − PV)
-                    //
-                    // SP accumulates each tick — this acts as an integrator on the DC amps error,
-                    // driving PV to DV with zero steady-state error between meter updates.
-                    if inner_tick >= 10 {
-                        inner_tick = 0;
-                        let error = dv - pv;
-                        let proportional = KP * error;
-                        let sp = (last_amps + proportional).clamp(lower, upper);
-                        log::debug!("Inner loop (V2h) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
-                            pv, dv, error, proportional, sp);
-                        sp
-                    } else {
-                        last_amps // inner loop has not fired this tick — hold setpoint
-                    }
-                }
-            }
+            V2h => v2h_requested_amps(chademo, &mut dv, last_amps, &mut last_meter, &mut inner_tick).await,
             Discharge => {
                 let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
                 let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
@@ -512,55 +335,8 @@ async fn charge_mode(
                 if eco {
                     let lower = 0.0_f32;
                     let upper = amps as f32;
-
-                    // Re-clamp DV in case it was left negative by a prior V2h discharge session
                     dv = dv.clamp(lower, upper);
-
-                    // PV: actual DC amps from PRE hardware (100 ms fresh).
-                    // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
-                    // stale x109.output_voltage which is only set once during precharge.
-                    let pre = PREDATA.lock().await;
-                    let pv = pre.get_dc_output_amps();
-                    let dc_v = pre.get_dc_output_volts().max(10.0);
-                    drop(pre);
-
-                    // OUTER LOOP — fires once per new meter reading.
-                    //
-                    // Charge-eco goal: absorb surplus solar (negative meter) up to the
-                    // operator charge limit; back off when the house is importing.
-                    //
-                    // Efficiency correction (90% assumed):
-                    //   meter > 0 (importing / back off): DC amps = AC watts / (η × V)
-                    //   meter < 0 (surplus / charge more): DC amps = AC watts × η / V
-                    //
-                    // DV = PV − adjusted_error_amps   (clamped to [0, charge_limit])
-                    if let Some(meter_raw) = METER.read().await.total_w {
-                        let meter = meter_raw + METER_BIAS;
-                        if meter != last_meter {
-                            last_meter = meter;
-                            let raw_error = meter / dc_v;
-                            let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
-                            dv = (pv - adj_error).clamp(lower, upper);
-                            log::info!("Outer loop (eco) | meter={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
-                                meter_raw, pv, adj_error, dv);
-                        }
-                    }
-
-                    // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
-                    //
-                    // Proportional step:  SP = last_SP + KP × (DV − PV)
-                    // Accumulates the setpoint toward DV using actual measured DC amps.
-                    if inner_tick >= 10 {
-                        inner_tick = 0;
-                        let error = dv - pv;
-                        let proportional = KP * error;
-                        let sp = (last_amps + proportional).clamp(lower, upper);
-                        log::debug!("Inner loop (eco) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
-                            pv, dv, error, proportional, sp);
-                        sp
-                    } else {
-                        last_amps
-                    }
+                    pid_step(&mut dv, last_amps, &mut last_meter, &mut inner_tick, lower, upper, 0.0, "eco").await
                 } else {
                     (amps as f32).min(chademo.requested_charging_amps())
                 }
@@ -605,6 +381,143 @@ async fn charge_mode(
         }
     };
     Ok(exit_reason)
+}
+
+// Outer+inner PI loop shared by all meter-based modes.
+//
+// Outer loop fires once per new meter reading — converts the watt imbalance into a DC amp
+// target (DV). meter_offset shifts the balance point (used by smart-export to settle at a
+// non-zero export level). Efficiency correction: meter > 0 divides by EFF, meter < 0 multiplies.
+//
+// Inner loop fires every 1 s (10 × 100 ms ticks): SP = last_SP + KP × (DV − PV).
+// Accumulates toward DV using actual measured DC amps, giving zero steady-state error.
+// Returns the new setpoint, or last_amps unchanged if the inner loop has not fired this tick.
+async fn pid_step(
+    dv: &mut f32,
+    last_amps: f32,
+    last_meter: &mut f32,
+    inner_tick: &mut u32,
+    lower: f32,
+    upper: f32,
+    meter_offset: f32,
+    label: &str,
+) -> f32 {
+    let pre = PREDATA.lock().await;
+    let pv = pre.get_dc_output_amps();
+    let dc_v = pre.get_dc_output_volts().max(10.0);
+    drop(pre);
+
+    if let Some(meter_raw) = METER.read().await.total_w {
+        let meter = meter_raw + METER_BIAS + meter_offset;
+        if meter != *last_meter {
+            *last_meter = meter;
+            let raw_error = meter / dc_v;
+            let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
+            *dv = (pv - adj_error).clamp(lower, upper);
+            log::info!("Outer loop ({label}) | meter={:.1}W offset={:.1}W PV={:.3}A adj_err={:.3}A DV={:.3}A",
+                meter_raw, meter_offset, pv, adj_error, *dv);
+        }
+    }
+
+    if *inner_tick >= 10 {
+        *inner_tick = 0;
+        let error = *dv - pv;
+        let proportional = KP * error;
+        let sp = (last_amps + proportional).clamp(lower, upper);
+        log::debug!("Inner loop ({label}) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A SP={:.3}A",
+            pv, *dv, error, proportional, sp);
+        sp
+    } else {
+        last_amps
+    }
+}
+
+// Computes the requested amps for V2h mode, dispatching across supervisor sub-modes.
+// Non-PID branches reset dv and inner_tick so the PID re-evaluates cleanly on re-entry.
+async fn v2h_requested_amps(
+    chademo: &Chademo,
+    dv: &mut f32,
+    last_amps: f32,
+    last_meter: &mut f32,
+    inner_tick: &mut u32,
+) -> f32 {
+    let sup = crate::data_io::supervisor::SUPERVISORY.read().await;
+    let ready_to_drive_active = sup.ready_to_drive_active;
+    let smart_export_active = sup.smart_export_active;
+    let smart_export_excess_solar_active = sup.smart_export_excess_solar_active;
+    let smart_charge_active = sup.smart_charge_active;
+    let off_peak_charging_active = sup.off_peak_charging_active;
+    let ev_drain_protection_active = sup.ev_drain_protection_active;
+    drop(sup);
+
+    // Priority: ready-to-drive > off-peak > smart-export > smart-charge > drain-protection > V2h default
+    if ready_to_drive_active {
+        *dv = 0.0;
+        *inner_tick = 9;
+        let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+        let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+        let soc_target = settings.ready_to_drive_soc.min(crate::MAX_SOC);
+        drop(settings);
+        if soc_target <= *chademo.soc() { 0.0 } else { (amps as f32).min(chademo.requested_charging_amps()) }
+    } else if off_peak_charging_active {
+        *dv = 0.0;
+        *inner_tick = 9;
+        let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+        // Cap by both the charge slider AND the V2H session cap — whichever is lower.
+        // v2h_max_amps is the physical limit for all current flows in this session.
+        let amps = settings.charge_amps.min(settings.v2h_max_amps).min(crate::MAX_AMPS);
+        let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+        drop(settings);
+        let soc = *chademo.soc();
+        // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
+        // last_amps == 0.0 means we were already stopped — stay stopped until below deadband.
+        if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) { 0.0 }
+        else { (amps as f32).min(chademo.requested_charging_amps()) }
+    } else if smart_export_active {
+        let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+        let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
+        let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+        let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
+        drop(settings);
+        if *chademo.soc() <= soc_min {
+            *dv = 0.0;
+            *inner_tick = 9;
+            0.0
+        } else {
+            let lower = -(max_amps as f32);
+            *dv = dv.clamp(lower, 0.0);
+            pid_step(dv, last_amps, last_meter, inner_tick, lower, 0.0, export_limit_w, "export").await
+        }
+    } else if smart_charge_active {
+        *dv = 0.0;
+        *inner_tick = 9;
+        let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+        let amps = settings.charge_amps.min(crate::MAX_AMPS);
+        let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+        drop(settings);
+        if soc_limit <= *chademo.soc() { 0.0 }
+        else { (amps as f32).min(chademo.requested_charging_amps()) }
+    } else if ev_drain_protection_active {
+        *dv = 0.0;
+        *inner_tick = 9;
+        0.0
+    } else {
+        let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
+        let self_use = settings.self_use;
+        let export_excess_solar = settings.export_excess_solar;
+        let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
+        let soc_max = settings.v2h_soc_max.min(crate::MAX_SOC);
+        let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+        drop(settings);
+        let soc_at_min = *chademo.soc() <= soc_min;
+        let soc_at_max = *chademo.soc() >= soc_max;
+
+        // Permitted range for this tick — derived from SoC position and operator flags
+        let upper = if export_excess_solar || smart_export_excess_solar_active || soc_at_max { 0.0 } else { max_amps as f32 };
+        let lower = if self_use && !soc_at_min { -(max_amps as f32) } else { 0.0 };
+        *dv = dv.clamp(lower, upper);
+        pid_step(dv, last_amps, last_meter, inner_tick, lower, upper, 0.0, "V2h").await
+    }
 }
 
 async fn init_pre(
