@@ -330,7 +330,9 @@ async fn charge_mode(
                     }
                 } else if off_peak_charging_active {
                     let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-                    let amps = settings.charge_amps.min(crate::MAX_AMPS);
+                    // Cap by both the charge slider AND the V2H session cap — whichever is lower.
+                    // v2h_max_amps is the physical limit for all current flows in this session.
+                    let amps = settings.charge_amps.min(settings.v2h_max_amps).min(crate::MAX_AMPS);
                     let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
                     drop(settings);
                     if soc_limit <= *chademo.soc() {
@@ -351,11 +353,13 @@ async fn charge_mode(
                     } else {
                         let lower = -(max_amps as f32);
 
-                        // PV (Process Variable): the actual DC amps currently flowing, read directly
-                        // from the PRE hardware. This updates every 100 ms and is what the inner loop
-                        // measures against DV to calculate the error.
-                        let pv = PREDATA.lock().await.get_dc_output_amps();
-                        let dc_v = chademo.x109.output_voltage.max(10.0);
+                        // PV (Process Variable): actual DC amps from PRE hardware (100 ms fresh).
+                        // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
+                        // stale x109.output_voltage which is only set once during precharge.
+                        let pre = PREDATA.lock().await;
+                        let pv = pre.get_dc_output_amps();
+                        let dc_v = pre.get_dc_output_volts().max(10.0);
+                        drop(pre);
 
                         // OUTER LOOP — fires once per new meter reading (typically every 10–30 s).
                         //
@@ -431,9 +435,13 @@ async fn charge_mode(
                     // (e.g. SoC hit the ceiling — we must not target charging any further).
                     dv = dv.clamp(lower, upper);
 
-                    // PV (Process Variable): actual DC amps from PRE hardware, updated every 100 ms.
-                    let pv = PREDATA.lock().await.get_dc_output_amps();
-                    let dc_v = chademo.x109.output_voltage.max(10.0);
+                    // PV (Process Variable): actual DC amps from PRE hardware (100 ms fresh).
+                    // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
+                    // stale x109.output_voltage which is only set once during precharge.
+                    let pre = PREDATA.lock().await;
+                    let pv = pre.get_dc_output_amps();
+                    let dc_v = pre.get_dc_output_volts().max(10.0);
+                    drop(pre);
 
                     // OUTER LOOP — fires once per new meter reading.
                     //
@@ -505,9 +513,13 @@ async fn charge_mode(
                     // Re-clamp DV in case it was left negative by a prior V2h discharge session
                     dv = dv.clamp(lower, upper);
 
-                    // PV: actual DC amps from PRE hardware
-                    let pv = PREDATA.lock().await.get_dc_output_amps();
-                    let dc_v = chademo.x109.output_voltage.max(10.0);
+                    // PV: actual DC amps from PRE hardware (100 ms fresh).
+                    // dc_v: actual DC output volts from PRE — updated every 100 ms, not the
+                    // stale x109.output_voltage which is only set once during precharge.
+                    let pre = PREDATA.lock().await;
+                    let pv = pre.get_dc_output_amps();
+                    let dc_v = pre.get_dc_output_volts().max(10.0);
+                    drop(pre);
 
                     // OUTER LOOP — fires once per new meter reading.
                     //
