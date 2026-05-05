@@ -335,7 +335,10 @@ async fn charge_mode(
                     let amps = settings.charge_amps.min(settings.v2h_max_amps).min(crate::MAX_AMPS);
                     let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
                     drop(settings);
-                    if soc_limit <= *chademo.soc() {
+                    let soc = *chademo.soc();
+                    // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
+                    // last_amps == 0.0 means we were already stopped — stay stopped until below deadband.
+                    if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) {
                         0.0
                     } else {
                         (amps as f32).min(chademo.requested_charging_amps())
