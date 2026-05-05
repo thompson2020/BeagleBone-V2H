@@ -140,7 +140,6 @@ pub async fn mqtt_task(mqtt_config: MqttConfig) -> Result<(), IndraError> {
 fn extract_value(payload: &str, field: &str) -> Option<f32> {
     use serde_json::Value;
     if let Ok(v) = payload.parse::<f32>() {
-        log::debug!("MQTT: plain number | {:.2}", v);
         return Some(v);
     }
     if let Ok(json) = serde_json::from_str::<Value>(payload) {
@@ -155,7 +154,6 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
             };
         }
         if let Some(v) = cur.as_f64() {
-            log::debug!("MQTT: JSON field '{}' | {:.2}", field, v);
             return Some(v as f32);
         }
         log::warn!("MQTT: JSON field '{}' is not a number | payload: {}", field, payload);
@@ -241,14 +239,10 @@ fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
                 log::warn!("MQTT staleness: {} STALE ({}s > {}s)", label, age, timeout_seconds);
                 true
             } else {
-                log::debug!("MQTT staleness: {} fresh ({}s)", label, age);
                 false
             }
         }
-        None => {
-            log::debug!("MQTT staleness: {} never received data", label);
-            false
-        }
+        None => false,
     }
 }
 

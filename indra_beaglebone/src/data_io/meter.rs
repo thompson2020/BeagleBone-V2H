@@ -92,7 +92,7 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
                     }
                 };
 
-                log::info!("Meter value  | {} ", val);
+                log::debug!("Meter value  | {} ", val);
                 {
                     let mut meter = METER.write().await;
                     meter.total_w = Some(val);
@@ -191,7 +191,6 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
 /// warning if the payload cannot be parsed or the path is missing.
 fn extract_value(payload: &str, field: &str) -> Option<f32> {
     if let Ok(v) = payload.parse::<f32>() {
-        log::debug!("MQTT Meter: plain number | {:.2}", v);
         return Some(v);
     }
     if let Ok(json) = serde_json::from_str::<Value>(payload) {
@@ -206,7 +205,6 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
             };
         }
         if let Some(v) = cur.as_f64() {
-            log::debug!("MQTT Meter: JSON field '{}' | {:.2}", field, v);
             return Some(v as f32);
         }
         log::warn!("MQTT Meter: JSON field '{}' is not a number | payload: {}", field, payload);
@@ -230,7 +228,6 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig)
             let mut m = METER.write().await;
             m.total_w = Some(scaled);
             m.last_total_update = Some(Instant::now());
-            log::debug!("MQTT Meter: total power | {:.2} W", scaled);
         }
     }
 
@@ -240,21 +237,18 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig)
             let mut m = METER.write().await;
             m.phase_w = Some(scaled);
             m.last_phase_update = Some(Instant::now());
-            log::debug!("MQTT Meter: phase power | {:.2} W", scaled);
         }
     }
 
     if !cfg.mqtt_meter_charger_volts_topic.is_empty() && msg.topic == cfg.mqtt_meter_charger_volts_topic {
         if let Ok(v) = payload.parse::<f32>() {
             METER.write().await.charger_v = Some(v);
-            log::debug!("MQTT Meter: charger voltage | {:.3} V", v);
         }
     }
 
     if !cfg.mqtt_meter_charger_current_topic.is_empty() && msg.topic == cfg.mqtt_meter_charger_current_topic {
         if let Ok(v) = payload.parse::<f32>() {
             METER.write().await.charger_a = Some(v);
-            log::debug!("MQTT Meter: charger current | {:.3} A", v);
         }
     }
 
@@ -274,7 +268,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig)
             let mut m = METER.write().await;
             m.charger_w = Some(scaled);
             m.efficiency = efficiency;
-            log::debug!("MQTT Meter: charger power | {:.2} W  efficiency | {:?} %", scaled, efficiency);
+            log::debug!("MQTT Meter: charger {:.2}W  efficiency {:?}%", scaled, efficiency);
         }
     }
 }
@@ -289,7 +283,7 @@ async fn mark_total_power_as_stale() {
 }
 async fn mark_phase_power_as_stale() {
     METER.write().await.phase_w = None;
-    log::error!("MQTT Meter: updated: phase power to stale (treating as offline) | Stale ");
+    log::error!("MQTT Meter: phase power STALE — treating as offline");
 }
 
 
@@ -310,14 +304,10 @@ fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
                 log::warn!("Meter staleness: {} STALE ({}s > {}s)", label, age, timeout_seconds);
                 true
             } else {
-                log::debug!("Meter staleness: {} fresh ({}s)", label, age);
                 false
             }
         }
-        None => {
-            log::warn!("Meter staleness: {} never received data", label);
-            false // no data yet — nothing to mark stale
-        }
+        None => false, // no data yet — nothing to mark stale
     }
 }
 
