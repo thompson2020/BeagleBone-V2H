@@ -257,6 +257,13 @@ async fn charge_mode(
     let mut last_amps = 0.0;
     let mut last_meter = 0.01;
     let mut counter = 0;
+
+    // PID state — shared across all meter-based V2h sub-modes.
+    let mut dv: f32 = 0.0;        // Desired Value: target DC output amps for the PRE
+    let mut inner_tick: u32 = 0;  // 100 ms tick counter; inner loop fires every 10 ticks (1 s)
+    const KP: f32 = 0.45;   // Proportional gain — used in both the outer and inner loops
+    const EFF: f32 = 0.9;   // Assumed charger efficiency (90%)
+
     use crate::global_state::OperationMode::*;
 
     let exit_reason = loop {
@@ -285,6 +292,7 @@ async fn charge_mode(
             counter = 0
         }
         counter += 1;
+        inner_tick += 1;
         {
             // listen for incomming mode changes
             if let Ok(op) = mode_rx.try_recv() {
@@ -337,13 +345,59 @@ async fn charge_mode(
                     let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
                     drop(settings);
                     if *chademo.soc() <= soc_min {
-                        // SoC floor hit: hold at 0A for remainder of slot
+                        // SoC floor hit — clear DV so the inner loop does not pursue a stale target
+                        dv = 0.0;
                         0.0
                     } else {
-                        // Track toward net export of export_limit_w watts; clamp to operator max discharge amps
-                        amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, export_limit_w)
-                            .await?
-                            .clamp(-(max_amps as f32), 0.0)
+                        let lower = -(max_amps as f32);
+
+                        // PV (Process Variable): the actual DC amps currently flowing, read directly
+                        // from the PRE hardware. This updates every 100 ms and is what the inner loop
+                        // measures against DV to calculate the error.
+                        let pv = PREDATA.lock().await.get_dc_output_amps();
+                        let dc_v = chademo.x109.output_voltage.max(10.0);
+
+                        // OUTER LOOP — fires once per new meter reading (typically every 10–30 s).
+                        //
+                        // Converts the watt imbalance into a DC amp target (DV).
+                        // export_limit_w shifts the balance point so the meter settles at
+                        // -export_limit_w (i.e. exporting that many watts) rather than zero.
+                        //
+                        // Efficiency correction (90% assumed):
+                        //   meter > 0 (import / need more discharge): DC amps = AC watts / (η × V)
+                        //   meter < 0 (export / need less discharge): DC amps = AC watts × η / V
+                        //
+                        // DV = PV − adjusted_error_amps   (clamped to discharge-only range)
+                        if let Some(meter_raw) = METER.read().await.total_w {
+                            let meter = meter_raw + METER_BIAS + export_limit_w;
+                            if meter != last_meter {
+                                last_meter = meter;
+                                let raw_error = meter / dc_v;
+                                let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
+                                dv = (pv - adj_error).clamp(lower, 0.0);
+                                log::info!("Outer loop (export) | meter={:.1}W limit={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
+                                    meter_raw, export_limit_w, pv, adj_error, dv);
+                            }
+                        }
+
+                        // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
+                        //
+                        // Proportional step:  SP = last_SP + KP × (DV − PV)
+                        //
+                        // Because SP accumulates each tick, this acts as an integrator on the
+                        // DC amps error — it drives PV to DV with zero steady-state error,
+                        // using only what the PRE is actually delivering, not what was requested.
+                        if inner_tick >= 10 {
+                            inner_tick = 0;
+                            let error = dv - pv;
+                            let proportional = KP * error;
+                            let sp = (last_amps + proportional).clamp(lower, 0.0);
+                            log::debug!("Inner loop (export) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
+                                pv, dv, error, proportional, sp);
+                            sp
+                        } else {
+                            last_amps // inner loop has not fired this tick — hold setpoint
+                        }
                     }
                 } else if smart_charge_active {
                     let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
@@ -368,10 +422,57 @@ async fn charge_mode(
                     drop(settings);
                     let soc_at_min = *chademo.soc() <= soc_min;
                     let soc_at_max = *chademo.soc() >= soc_max;
-                    let amps = amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0).await?;
+
+                    // Permitted range for this tick — derived from SoC position and operator flags
                     let upper = if export_excess_solar || smart_export_excess_solar_active || soc_at_max { 0.0 } else { max_amps as f32 };
                     let lower = if self_use && !soc_at_min { -(max_amps as f32) } else { 0.0 };
-                    amps.clamp(lower, upper)
+
+                    // Re-clamp DV whenever SoC or settings have narrowed the permitted range
+                    // (e.g. SoC hit the ceiling — we must not target charging any further).
+                    dv = dv.clamp(lower, upper);
+
+                    // PV (Process Variable): actual DC amps from PRE hardware, updated every 100 ms.
+                    let pv = PREDATA.lock().await.get_dc_output_amps();
+                    let dc_v = chademo.x109.output_voltage.max(10.0);
+
+                    // OUTER LOOP — fires once per new meter reading.
+                    //
+                    // Converts the grid watt imbalance into a DC amp target (DV).
+                    //
+                    // Efficiency correction (90% assumed):
+                    //   meter > 0 (importing / discharge direction): DC amps = AC watts / (η × V)
+                    //   meter < 0 (exporting / charge direction):    DC amps = AC watts × η / V
+                    //
+                    // DV = PV − adjusted_error_amps   (clamped to permitted charge/discharge range)
+                    if let Some(meter_raw) = METER.read().await.total_w {
+                        let meter = meter_raw + METER_BIAS;
+                        if meter != last_meter {
+                            last_meter = meter;
+                            let raw_error = meter / dc_v;
+                            let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
+                            dv = (pv - adj_error).clamp(lower, upper);
+                            log::info!("Outer loop (V2h) | meter={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
+                                meter_raw, pv, adj_error, dv);
+                        }
+                    }
+
+                    // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
+                    //
+                    // Proportional step:  SP = last_SP + KP × (DV − PV)
+                    //
+                    // SP accumulates each tick — this acts as an integrator on the DC amps error,
+                    // driving PV to DV with zero steady-state error between meter updates.
+                    if inner_tick >= 10 {
+                        inner_tick = 0;
+                        let error = dv - pv;
+                        let proportional = KP * error;
+                        let sp = (last_amps + proportional).clamp(lower, upper);
+                        log::debug!("Inner loop (V2h) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
+                            pv, dv, error, proportional, sp);
+                        sp
+                    } else {
+                        last_amps // inner loop has not fired this tick — hold setpoint
+                    }
                 }
             }
             Discharge => {
@@ -398,9 +499,53 @@ async fn charge_mode(
                     continue;
                 }
                 if eco {
-                    amps_meter_profiler(&mut last_meter, &last_amps, &*chademo, 0.0)
-                        .await?
-                        .clamp(0.0, MAX_AMPS as f32)
+                    let lower = 0.0_f32;
+                    let upper = amps as f32;
+
+                    // Re-clamp DV in case it was left negative by a prior V2h discharge session
+                    dv = dv.clamp(lower, upper);
+
+                    // PV: actual DC amps from PRE hardware
+                    let pv = PREDATA.lock().await.get_dc_output_amps();
+                    let dc_v = chademo.x109.output_voltage.max(10.0);
+
+                    // OUTER LOOP — fires once per new meter reading.
+                    //
+                    // Charge-eco goal: absorb surplus solar (negative meter) up to the
+                    // operator charge limit; back off when the house is importing.
+                    //
+                    // Efficiency correction (90% assumed):
+                    //   meter > 0 (importing / back off): DC amps = AC watts / (η × V)
+                    //   meter < 0 (surplus / charge more): DC amps = AC watts × η / V
+                    //
+                    // DV = PV − adjusted_error_amps   (clamped to [0, charge_limit])
+                    if let Some(meter_raw) = METER.read().await.total_w {
+                        let meter = meter_raw + METER_BIAS;
+                        if meter != last_meter {
+                            last_meter = meter;
+                            let raw_error = meter / dc_v;
+                            let adj_error = if raw_error >= 0.0 { raw_error / EFF } else { raw_error * EFF };
+                            dv = (pv - adj_error).clamp(lower, upper);
+                            log::info!("Outer loop (eco) | meter={:.1}W PV={:.3}A adj_err={:.3}A → DV={:.3}A",
+                                meter_raw, pv, adj_error, dv);
+                        }
+                    }
+
+                    // INNER LOOP — fires every 1 s (every 10 × 100 ms ticks).
+                    //
+                    // Proportional step:  SP = last_SP + KP × (DV − PV)
+                    // Accumulates the setpoint toward DV using actual measured DC amps.
+                    if inner_tick >= 10 {
+                        inner_tick = 0;
+                        let error = dv - pv;
+                        let proportional = KP * error;
+                        let sp = (last_amps + proportional).clamp(lower, upper);
+                        log::debug!("Inner loop (eco) | PV={:.3}A DV={:.3}A err={:.3}A prop={:.3}A → SP={:.3}A",
+                            pv, dv, error, proportional, sp);
+                        sp
+                    } else {
+                        last_amps
+                    }
                 } else {
                     (amps as f32).min(chademo.requested_charging_amps())
                 }
@@ -576,66 +721,6 @@ async fn precharge(
         // if x102.5.3
     }
     Err(IndraError::Timeout)
-}
-
-/// `export_limit_w` shifts the controller setpoint: pass 0.0 for normal V2H load-balance,
-/// or a positive watt value to target that many watts of net grid export.
-/// The controller drives (meter + export_limit_w) → 0, i.e. real meter → -export_limit_w.
-async fn amps_meter_profiler(
-    feedback: &mut f32,
-    last_setpoint_amps: &f32,
-    chademo: &Chademo,
-    export_limit_w: f32,
-) -> Result<f32, IndraError> {
-    let meter = match METER.read().await.total_w {
-        Some(val) => val + METER_BIAS + export_limit_w,
-        None => {
-            log::error!("Meter offline");
-            *feedback
-        }
-    };
-
-    if *feedback == meter && meter.is_normal() {
-        return Ok(*last_setpoint_amps);
-    }
-
-    *feedback = meter;
-
-    let setpoint_amps = calculate_setpoint_amps(last_setpoint_amps, meter, chademo);
-    Ok(limit_setpoint_amps(setpoint_amps, chademo))
-}
-
-fn calculate_setpoint_amps(last_setpoint_amps: &f32, meter: f32, chademo: &Chademo) -> f32 {
-    let setpoint_amps = last_setpoint_amps - (meter / chademo.x109.output_voltage) * 0.45;
-    setpoint_amps.clamp(
-        -1.0 * chademo.x200.maximum_discharge_current as f32,
-        chademo.x102.charging_current_request as f32,
-    )
-}
-
-fn limit_setpoint_amps(setpoint_amps: f32, chademo: &Chademo) -> f32 {
-    let soc = *chademo.soc();
-    if matches!(chademo.state(), OperationMode::V2h) {
-        if MIN_SOC >= soc && setpoint_amps.is_sign_negative() {
-            log::warn!("SoC: too low, discharge disabled | {} %", soc);
-            0.0
-        } else if MAX_SOC <= soc && setpoint_amps.is_sign_positive() {
-            log::warn!("SoC: too high, charge disabled | {} %", soc);
-            0.0
-        } else if setpoint_amps.is_sign_positive()
-            && setpoint_amps > chademo.x102.charging_current_request as f32
-        {
-            log::warn!(
-                "Charge taper: {}A too high, charge restricted to {}A",
-                setpoint_amps, chademo.x102.charging_current_request
-            );
-            setpoint_amps.min(chademo.x102.charging_current_request as f32)
-        } else {
-            setpoint_amps
-        }
-    } else {
-        setpoint_amps
-    }
 }
 
 async fn update_chademo_mutex(chademo: &Chademo) {
