@@ -50,6 +50,11 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             log::info!("Aborting Pre thread  | {}", handle.id());
             handle.abort(); // Abort the previous tasks
         }
+        // Reset electrical state immediately so the UI snapshot shows clean zeros while idle.
+        // SoC is deliberately kept — it's the last known EV battery level.
+        *PREDATA.lock().await = PreCharger::default();
+        chademo.update_amps(0i16);
+        chademo.x102.charging_current_request = 0;
         reset_gpio_state(&mut chademo);
         chademo.set_state(OperationMode::Idle);
         update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
