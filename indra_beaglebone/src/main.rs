@@ -44,6 +44,39 @@ static POOL: OnceCell<Database> = OnceCell::const_new();
  *          Detect input pin?
  *
  */
+async fn setup_can_interfaces() {
+    log::info!("CAN: bringing up interfaces");
+    for iface in &["can0", "can1"] {
+        // Take down first — ignore error, interface may already be down
+        let _ = tokio::process::Command::new("ip")
+            .args(["link", "set", iface, "down"])
+            .status()
+            .await;
+
+        let configured = tokio::process::Command::new("ip")
+            .args(["link", "set", iface, "type", "can", "bitrate", "500000"])
+            .status()
+            .await
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        let up = tokio::process::Command::new("ip")
+            .args(["link", "set", iface, "up"])
+            .status()
+            .await
+            .map(|s| s.success())
+            .unwrap_or(false);
+
+        if configured && up {
+            log::info!("CAN: {} up at 500 kbps", iface);
+        } else {
+            log::error!("CAN: failed to bring up {} (configured={} up={})", iface, configured, up);
+        }
+    }
+    // Allow kernel time to initialise the interfaces before any socket is opened
+    tokio::time::sleep(Duration::from_millis(500)).await;
+}
+
 #[tokio::main]
 async fn main() -> Result<(), &'static str> {
     // ==================== STARTUP BANNER ====================
@@ -73,6 +106,8 @@ async fn main() -> Result<(), &'static str> {
     log::info!("=== Indra BeagleBone service starting ===");
     log::info!("Built: {}", build_time.format("%Y-%m-%d %H:%M:%S"));
     // =======================================================
+
+    setup_can_interfaces().await;
 
 
 
