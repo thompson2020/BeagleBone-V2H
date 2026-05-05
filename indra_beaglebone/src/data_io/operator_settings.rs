@@ -11,7 +11,9 @@ const TAG: &str = "[OPSETTINGS]";
 pub struct OperatorSettings {
     // Smart Self-Powered
     pub v2h_soc_min:          u8,
-    pub v2h_soc_max:          u8,
+    pub v2h_soc_max:          u8,   // SoC ceiling for solar V2H mode
+    #[serde(default = "default_v2h_soc_max_boost")]
+    pub v2h_soc_max_boost:    u8,   // SoC ceiling for off-peak and smart-charge
     pub v2h_max_amps:         u8,
     pub self_use:             bool,
     pub export_excess_solar:  bool,
@@ -29,6 +31,8 @@ pub struct OperatorSettings {
     pub smart_charge:         bool,
     pub smart_export:         bool,
     pub smart_export_limit_w: u32,
+    #[serde(default = "default_smart_export_soc_min")]
+    pub smart_export_soc_min: u8,
     pub smart_export_excess_solar: bool,
     // Charge card
     pub charge_soc_limit:     u8,
@@ -37,12 +41,15 @@ pub struct OperatorSettings {
 }
 
 fn default_rtd_start_time() -> String { "--:--".to_string() }
+fn default_v2h_soc_max_boost() -> u8 { 80 }
+fn default_smart_export_soc_min() -> u8 { 31 }
 
 impl Default for OperatorSettings {
     fn default() -> Self {
         Self {
             v2h_soc_min:          31,
             v2h_soc_max:          90,
+            v2h_soc_max_boost:    80,
             v2h_max_amps:         16,
             self_use:             true,
             export_excess_solar:  false,
@@ -58,6 +65,7 @@ impl Default for OperatorSettings {
             smart_charge:         true,
             smart_export:         false,
             smart_export_limit_w: 2500,
+            smart_export_soc_min: 31,
             smart_export_excess_solar:  false,
             charge_soc_limit:     90,
             charge_amps:          16,
@@ -79,7 +87,9 @@ impl OperatorSettings {
             log::warn!("{TAG} v2h_soc_min ({}) >= v2h_soc_max ({}) — pulling min down", self.v2h_soc_min, self.v2h_soc_max);
             self.v2h_soc_min = self.v2h_soc_max.saturating_sub(5).max(min_soc);
         }
-        self.charge_soc_limit  = self.charge_soc_limit.clamp(min_soc, max_soc);
+        self.v2h_soc_max_boost  = self.v2h_soc_max_boost.clamp(min_soc, self.v2h_soc_max);
+        self.smart_export_soc_min = self.smart_export_soc_min.clamp(self.v2h_soc_min, self.v2h_soc_max);
+        self.charge_soc_limit   = self.charge_soc_limit.clamp(min_soc, max_soc);
         self.ready_to_drive_soc = self.ready_to_drive_soc.clamp(min_soc, max_soc);
 
         // Amps bounds

@@ -468,10 +468,8 @@ async fn v2h_requested_amps(
         *dv = 0.0;
         *inner_tick = 9;
         let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-        // Cap by both the charge slider AND the V2H session cap — whichever is lower.
-        // v2h_max_amps is the physical limit for all current flows in this session.
-        let amps = settings.charge_amps.min(settings.v2h_max_amps).min(crate::MAX_AMPS);
-        let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+        let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+        let soc_limit = settings.v2h_soc_max_boost.min(crate::MAX_SOC);
         drop(settings);
         let soc = *chademo.soc();
         // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
@@ -480,7 +478,7 @@ async fn v2h_requested_amps(
         else { (amps as f32).min(chademo.requested_charging_amps()) }
     } else if smart_export_active {
         let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-        let soc_min = settings.v2h_soc_min.max(crate::MIN_SOC);
+        let soc_min = settings.smart_export_soc_min.max(crate::MIN_SOC);
         let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
         let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
         drop(settings);
@@ -497,8 +495,8 @@ async fn v2h_requested_amps(
         *dv = 0.0;
         *inner_tick = 9;
         let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
-        let amps = settings.charge_amps.min(crate::MAX_AMPS);
-        let soc_limit = settings.charge_soc_limit.min(crate::MAX_SOC);
+        let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
+        let soc_limit = settings.v2h_soc_max_boost.min(crate::MAX_SOC);
         drop(settings);
         if soc_limit <= *chademo.soc() { 0.0 }
         else { (amps as f32).min(chademo.requested_charging_amps()) }
