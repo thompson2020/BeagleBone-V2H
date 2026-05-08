@@ -10,26 +10,30 @@ use tokio::time::{sleep, Duration};
 /// `_request`  — the raw incoming signal (from MQTT or internal calculation).
 /// `_active`   — set by the supervisor task when it decides to act on a request.
 ///               `ev_connect.rs` reads only `_active` flags and never evaluates conditions itself.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, serde::Serialize)]
 pub struct SupervisoryState {
     // Smart Charge — source: MQTT from HA (Octopus IOG cheap slot)
     pub smart_charge_request: bool,
     pub smart_charge_active: bool,
+    #[serde(skip)]
     pub smart_charge_request_update: Option<Instant>,
 
     // EV Drain Protection — source: MQTT from HA
     pub ev_drain_protection_request: bool,
     pub ev_drain_protection_active: bool,
+    #[serde(skip)]
     pub ev_drain_protection_request_update: Option<Instant>,
 
     // Smart Export — source: MQTT from HA (favourable export price)
     pub smart_export_request: bool,
     pub smart_export_active: bool,
+    #[serde(skip)]
     pub smart_export_request_update: Option<Instant>,
 
     // Smart Export Excess Solar — source: MQTT from HA (export rate > overnight import rate)
     pub smart_export_excess_solar_request: bool,
     pub smart_export_excess_solar_active: bool,
+    #[serde(skip)]
     pub smart_export_excess_solar_request_update: Option<Instant>,
 
     // Ready to Drive — source: internal (clock within calculated start → ready_to_drive_end_time+2h)

@@ -22,7 +22,7 @@ use std::{
 };
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::mpsc,
+    sync::{mpsc, watch},
     time::sleep,
 };
 use tokio_tungstenite::tungstenite::{self, Message};
@@ -33,13 +33,27 @@ const PUSH_INTERVAL: Duration = Duration::from_secs(1);
 pub async fn run(events_tx: EventsTx, mode_tx: ChademoTx) -> Result<(), Error> {
     let listener = TcpListener::bind("0.0.0.0:5555").await?;
     log::info!("WebSockets listening on: 0.0.0.0:5555");
+
+    // Single producer serialises snapshot once per second; all clients share the result.
+    let (snap_tx, snap_rx) = watch::channel(String::new());
+    tokio::spawn(async move {
+        loop {
+            sleep(PUSH_INTERVAL).await;
+            let snap = snapshot().await;
+            match serde_json::to_string(&Response::Data(snap)) {
+                Ok(json) => { let _ = snap_tx.send(json); }
+                Err(e) => log::error!("WS snapshot serialise error: {e}"),
+            }
+        }
+    });
+
     while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(accept_connection(stream, events_tx.clone(), mode_tx.clone()));
+        tokio::spawn(accept_connection(stream, events_tx.clone(), mode_tx.clone(), snap_rx.clone()));
     }
     Ok(())
 }
 
-async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: ChademoTx) {
+async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: ChademoTx, snap_rx: watch::Receiver<String>) {
     let addr = match stream.peer_addr() {
         Ok(a) => a,
         Err(e) => {
@@ -74,20 +88,16 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
         }
     });
 
-    // Push a snapshot every second without waiting for a client request.
+    // Forward pre-serialised snapshot to this client whenever the shared producer fires.
     let push_tx = outbox_tx.clone();
     let push_task = tokio::spawn(async move {
+        let mut rx = snap_rx;
         loop {
-            let snap = snapshot().await;
-            match serde_json::to_string(&Response::Data(snap)) {
-                Ok(json) => {
-                    if push_tx.send(Message::Text(json)).await.is_err() {
-                        break;
-                    }
-                }
-                Err(e) => log::error!("WS snapshot serialise error: {e}"),
+            if rx.changed().await.is_err() { break; }
+            let json = rx.borrow().clone();
+            if !json.is_empty() && push_tx.send(Message::Text(json)).await.is_err() {
+                break;
             }
-            sleep(PUSH_INTERVAL).await;
         }
     });
 

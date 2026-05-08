@@ -37,7 +37,7 @@ impl PreState {
     }
 }
 
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug, serde::Serialize)]
 pub struct PreCharger {
     state: PreState,
     temp: f32,

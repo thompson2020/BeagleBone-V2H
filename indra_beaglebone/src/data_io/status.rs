@@ -1,113 +1,111 @@
-use crate::{global_state::OperationMode, pre_charger::PreState};
-use super::operator_settings::OperatorSettings;
+use crate::{
+    chademo::state::{BOOSTPIN, ESTOPPIN, MASTERCONTACTOR, ONOFFPIN, RESETPCAPIN},
+    global_state::OperationMode,
+    pre_charger::PreCharger,
+};
+use super::{meter::MeterState, operator_settings::OperatorSettings, supervisor::SupervisoryState};
+use chademo_v2::{X100, X101, X102, X108, X109, X200, X208, X209};
 use serde::Serialize;
+use sysfs_gpio::Pin;
+
+/// Signals on the CHAdeMO connector itself (as defined in CHAdeMO 2.0 / IEC 61851-23).
+#[derive(Serialize, Debug)]
+pub struct ChademoConnectorGpio {
+    pub k_line:          u8, // Charge sequence signal (input — low = EV requests sequence)
+    pub d1_ev_contactor: u8, // D1: +HV EV-side relay (output — high = commanded closed)
+    pub d2_ev_contactor: u8, // D2: -HV EV-side relay (output — high = commanded closed)
+    pub plug_lock:       u8, // Plug-lock solenoid (output — high = locked)
+}
+
+/// EVSE internal I/O — buttons, safety, and power-path contactors.
+#[derive(Serialize, Debug)]
+pub struct EvseGpio {
+    pub estop:            u8, // Emergency stop (input — low = active/pressed)
+    pub on_off_button:    u8, // Front-panel On/Off (input — low = pressed)
+    pub boost_button:     u8, // Front-panel Boost (input — low = pressed)
+    pub c1_contactor:     u8, // C1 AC contactor (output)
+    pub c2_contactor:     u8, // C2 AC contactor (output)
+    pub pre_ac:           u8, // PRE AC input contactor (output)
+    pub master_contactor: u8, // Master DC contactor (output)
+    pub pca_reset:        u8, // PCA9552 LED driver reset (output — init high)
+}
+
+#[derive(Serialize, Debug)]
+pub struct GpioSnapshot {
+    pub chademo_connector: ChademoConnectorGpio,
+    pub evse_io:           EvseGpio,
+}
+
+#[derive(Serialize, Debug)]
+pub struct ChademoSnapshot {
+    pub state:        OperationMode,
+    pub soc:          u8,
+    pub current_amps: i16,
+    // EV → EVSE (received from vehicle)
+    pub x100: X100,
+    pub x101: X101,
+    pub x102: X102,
+    pub x200: X200,
+    // EVSE → EV (sent to vehicle)
+    pub x108: X108,
+    pub x109: X109,
+    pub x208: X208,
+    pub x209: X209,
+    pub gpio: GpioSnapshot,
+}
 
 #[derive(Serialize, Debug)]
 pub struct ChargerSnapshot {
-    // From CHADEMO (car / CHAdeMO protocol state)
-    pub soc: f32,
-    pub state: OperationMode,
-    pub requested_amps: f32,
-
-    // From PREDATA (pre-charger / DC-DC converter)
-    pub pre_state:           PreState,
-    pub dc_volts_setpoint:   f32,
-    pub dc_amps_setpoint:    f32,
-    pub dc_output_volts:     f32,
-    pub dc_output_amps:      f32,
-    pub dc_w:                f32,
-    pub dc_bus_volts:        f32,
-    pub ac_amps:             f32,
-    pub pre_temp:            f32,
-    pub pre_fan:             u8,
-    pub pre_enabled:         bool,
-    pub pre_status_ok:       bool,
-    pub pre_status:          [u8; 2],
-
-    // From METER (grid power meter)
-    pub meter_kw: f32,
-    pub phase_w: Option<f32>,
-
-    // From METER (charger sub-meter: SDM230 via mbmd)
-    pub charger_v: Option<f32>,
-    pub charger_a: Option<f32>,
-    pub charger_w: Option<f32>,
-    pub efficiency: Option<f32>,
-
-    // From SUPERVISORY (Home Assistant commands + internal computation)
-    pub smart_charge_request: bool,
-    pub smart_charge_active: bool,
-
-    pub ev_drain_protection_request: bool,
-    pub ev_drain_protection_active: bool,
-    
-    pub smart_export_request: bool,
-    pub smart_export_active: bool,
-
-    pub smart_export_excess_solar_request: bool,
-    pub smart_export_excess_solar_active: bool,
-
-    pub ready_to_drive_request: bool,
-    pub ready_to_drive_active: bool,
-
-    pub off_peak_charging_request: bool,
-    pub off_peak_charging_active: bool,
-
-    // From OPERATOR_SETTINGS (web UI / future MQTT)
-    pub settings: OperatorSettings,
+    pub chademo:     ChademoSnapshot,
+    pub pre:         PreCharger,
+    pub meter:       MeterState,
+    pub supervisory: SupervisoryState,
+    pub settings:    OperatorSettings,
 }
 
 pub async fn snapshot() -> ChargerSnapshot {
-    let chademo   = crate::chademo::state::CHADEMO.lock().await;
-    let pre       = crate::pre_charger::PREDATA.lock().await;
-    let meter     = super::meter::METER.read().await;
-    let sup       = super::supervisor::SUPERVISORY.read().await;
-    let settings  = super::operator_settings::OPERATOR_SETTINGS.read().await.clone();
+    let read_pin = |num: u64| Pin::new(num).get_value().unwrap_or(255);
 
-    ChargerSnapshot {
-        soc:             *chademo.soc() as f32,
-        state:           *chademo.state(),
-        requested_amps:  chademo.requested_charging_amps(),
+    let chademo = crate::chademo::state::CHADEMO.lock().await;
+    let pins = chademo.pins();
+    let gpio = GpioSnapshot {
+        chademo_connector: ChademoConnectorGpio {
+            k_line:          pins.k.get_value().unwrap_or(255),
+            d1_ev_contactor: pins.d1.get_value().unwrap_or(255),
+            d2_ev_contactor: pins.d2.get_value().unwrap_or(255),
+            plug_lock:       pins.pluglock.get_value().unwrap_or(255),
+        },
+        evse_io: EvseGpio {
+            estop:            read_pin(ESTOPPIN),
+            on_off_button:    read_pin(ONOFFPIN),
+            boost_button:     read_pin(BOOSTPIN),
+            c1_contactor:     pins.c1.get_value().unwrap_or(255),
+            c2_contactor:     pins.c2.get_value().unwrap_or(255),
+            pre_ac:           pins.pre_ac.get_value().unwrap_or(255),
+            master_contactor: read_pin(MASTERCONTACTOR),
+            pca_reset:        read_pin(RESETPCAPIN),
+        },
+    };
+    let chademo_snap = ChademoSnapshot {
+        state:        *chademo.state(),
+        soc:          *chademo.soc(),
+        current_amps: *chademo.output_amps(),
+        x100: chademo.x100,
+        x101: chademo.x101,
+        x102: chademo.x102,
+        x200: chademo.x200,
+        x108: chademo.x108,
+        x109: chademo.x109,
+        x208: chademo.x208,
+        x209: chademo.x209,
+        gpio,
+    };
+    drop(chademo);
 
-        pre_state:           *pre.get_state(),
-        dc_volts_setpoint:   pre.get_dc_setpoint_volts(),
-        dc_amps_setpoint:    pre.get_dc_setpoint_amps(),
-        dc_output_volts:     pre.get_dc_output_volts(),
-        dc_output_amps:      pre.get_dc_output_amps(),
-        dc_w:                pre.dc_power(),
-        dc_bus_volts:        pre.get_dc_bus_volts(),
-        ac_amps:             pre.get_ac_amps(),
-        pre_temp:            pre.get_temp(),
-        pre_fan:             pre.get_fan_percentage(),
-        pre_enabled:         pre.enabled(),
-        pre_status_ok:       pre.status_ok(),
-        pre_status:          *pre.get_status(),
+    let pre         = *crate::pre_charger::PREDATA.lock().await;
+    let meter       = *super::meter::METER.read().await;
+    let supervisory = *super::supervisor::SUPERVISORY.read().await;
+    let settings    = super::operator_settings::OPERATOR_SETTINGS.read().await.clone();
 
-        meter_kw:        meter.total_w.unwrap_or(0.0),
-        phase_w:         meter.phase_w,
-
-        charger_v:       meter.charger_v,
-        charger_a:       meter.charger_a,
-        charger_w:       meter.charger_w,
-        efficiency:      meter.efficiency,
-
-        smart_charge_request:        sup.smart_charge_request,
-        smart_charge_active:         sup.smart_charge_active,
-
-        ev_drain_protection_request: sup.ev_drain_protection_request,
-        ev_drain_protection_active:  sup.ev_drain_protection_active,
-
-        smart_export_request:                    sup.smart_export_request,
-        smart_export_active:                     sup.smart_export_active,
-
-        smart_export_excess_solar_request:       sup.smart_export_excess_solar_request,
-        smart_export_excess_solar_active:        sup.smart_export_excess_solar_active,
-
-        ready_to_drive_request:      sup.ready_to_drive_request,
-        ready_to_drive_active:       sup.ready_to_drive_active,
-        off_peak_charging_request:   sup.off_peak_charging_request,
-        off_peak_charging_active:    sup.off_peak_charging_active,
-
-        settings,
-    }
+    ChargerSnapshot { chademo: chademo_snap, pre, meter, supervisory, settings }
 }

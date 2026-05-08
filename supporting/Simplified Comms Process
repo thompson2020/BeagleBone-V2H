@@ -1,0 +1,159 @@
+Full Startup Sequence
+EVSE (charger)                         EV (vehicle)
+────────────────────────────────────────────────────────────
+
+Idle                                  Idle
+
+Connector inserted
+detect proximity switch
+───────────────────────────────▶      Detect plug inserted
+
+Apply auxiliary 12V
+to connector circuitry
+───────────────────────────────▶      EV electronics wake
+
+Pilot/interlock valid
+───────────────────────────────▶      Verifies connector state
+
+K-Line pulled HIGH by EVSE
+(idle state)
+───────────────────────────────▶      Detects K-Line idle
+
+                                       EV begins K-Line response
+
+K-Line serial init begins
+(ISO9141-style)
+◀──────────────────────────────▶      Serial negotiation
+
+Exchange:
+- protocol version
+- charger type
+- compatibility
+- permissions
+
+K-Line session established
+◀──────────────────────────────▶
+
+EV locks connector
+                                       Close inlet lock actuator
+
+EVSE enables CAN bus
+Starts transmitting:
+0x108
+0x109
+───────────────────────────────▶
+
+                                       EV detects CAN traffic
+
+                                       EV starts transmitting:
+                                       0x100
+                                       0x101
+                                       0x102
+                              ◀───────────────────────────────
+
+0x108:
+Max voltage/current
+
+0x109:
+READY=1
+OUTPUT=0V
+OUTPUT=0A
+
+                                       0x100:
+                                       Requested current=0
+                                       Requested voltage=battery V
+                                       Charge enable=0
+
+                                       0x101:
+                                       Capacity/timing
+
+                                       0x102:
+                                       SOC/status/faults
+
+Capability validation
+(max voltage/current compatible?)
+
+Isolation test begins
+HV leakage check
+───────────────────────────────▶
+
+(Optional)
+Insulation resistance reporting
+via 0x109 / 0x200+
+
+Precharge preparation
+
+EV closes internal
+precharge relay
+                                       Vehicle precharge path active
+
+EVSE ramps DC output voltage
+toward battery voltage
+───────────────────────────────▶
+
+Voltage delta monitored
+by BOTH sides
+
+When ΔV sufficiently low:
+
+EV closes main battery contactors
+                                       Main HV relays close
+
+EVSE closes output contactors
+
+Precharge relay opened
+(normal current path now active)
+
+                                       EV updates 0x100:
+                                       Charge Enable=1
+                                       Requested Current >0A
+                              ◀───────────────────────────────
+
+EVSE enables current output
+───────────────────────────────▶
+
+Current ramps upward
+
+Normal charging begins
+
+Continuous 100ms exchange:
+───────────────────────────────▶      0x108
+───────────────────────────────▶      0x109
+
+                              ◀─────────────────────────────── 0x100
+                              ◀─────────────────────────────── 0x101
+                              ◀─────────────────────────────── 0x102
+
+(Optional vendor traffic)
+0x200+
+◀──────────────────────────────▶
+
+Charging taper phase
+
+                                       EV reduces requested current
+                              ◀───────────────────────────────
+
+Current approaches zero
+
+                                       EV requests stop:
+                                       Requested current=0
+                              ◀───────────────────────────────
+
+EVSE ramps output current down
+to zero
+───────────────────────────────▶
+
+EVSE opens DC output contactors
+
+                                       EV opens main contactors
+
+Residual voltage discharge
+
+CAN traffic stops
+
+K-Line session ends
+
+Unlock connector
+───────────────────────────────▶
+
+User unplugs

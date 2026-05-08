@@ -26,7 +26,7 @@ pub async fn init(update_millisecs: u64) -> Result<(), IndraError> {
         let instant = Instant::now();
 
         let snap = snapshot().await;
-        if snap.state.is_inactive() {
+        if snap.chademo.state.is_inactive() {
             // only record activity
             sleep(std::time::Duration::from_secs(1)).await;
             continue;
@@ -70,14 +70,14 @@ impl From<ChargerSnapshot> for ChademoDbRow {
         Self {
             id: 0,
             timestamp: Utc::now(),
-            dc_kw: value.dc_w,
-            soc: value.soc as u8,
-            volts: value.dc_output_volts as u16,
-            temp: value.pre_temp,
-            amps: value.dc_output_amps,
-            requested_amps: value.requested_amps as i16,
-            fan: value.pre_fan,
-            meter_kw: value.meter_kw,
+            dc_kw: value.pre.dc_power(),
+            soc: value.chademo.soc,
+            volts: value.pre.get_dc_output_volts() as u16,
+            temp: value.pre.get_temp(),
+            amps: value.pre.get_dc_output_amps(),
+            requested_amps: value.chademo.x102.charging_current_request as i16,
+            fan: value.pre.get_fan_percentage(),
+            meter_kw: value.meter.total_w.unwrap_or(0.0),
         }
     }
 }

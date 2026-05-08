@@ -4,7 +4,7 @@
 use tokio_socketcan::CANFrame;
 
 /// Vehicle CAN frame
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
 pub struct X100 {
     /// Set “minimum current” defined by vehicle
     pub minimum_charge_current: u8,
@@ -30,7 +30,7 @@ impl From<&CANFrame> for X100 {
 
 /// Vehicle CAN frame
 #[allow(dead_code)]
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
 pub struct X101 {
     /// Maximum charging time that vehicle permits charger
     max_charging_time_10s_bit: u8,
@@ -55,7 +55,7 @@ impl From<&CANFrame> for X101 {
 }
 
 /// Vehicle CAN frame
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
 pub struct X102 {
     /// CHAdeMO protocol number
     pub control_protocol_number_ev: u8,
@@ -110,7 +110,7 @@ impl From<&CANFrame> for X102 {
 }
 
 /// 1 = error, 0 = normal
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
 pub struct X102Faults {
     /// 102.4.4
     /// - Battery voltage deviation error
@@ -155,7 +155,7 @@ impl From<u8> for X102Faults {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
 pub struct X102Status {
     /// 102.5.7
     /// - The flag indicating the vehicle is compatible with discharging
@@ -225,7 +225,7 @@ impl Into<u8> for X102Status {
 }
 
 /// EVSE CAN frame
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, serde::Serialize)]
 pub struct X108 {
     /// 108.3 - Current that the EVSE can output at present.
     ///
@@ -282,7 +282,7 @@ impl X108 {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
 pub struct X109Status {
     /// 109.5.5 - Set this flag to 1 before charging (e.g., initial value and during insulation test).
     ///
@@ -348,7 +348,7 @@ impl From<u8> for X109Status {
     }
 }
 /// EVSE CAN frame
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
 pub struct X109 {
     pub status: X109Status,
     control_protocol_number_qc: u8,
@@ -405,7 +405,7 @@ impl From<&CANFrame> for X109 {
 }
 
 // Vehicle can frame
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
 pub struct X200 {
     /// Maximum discharge current that the vehicle permits to the EVSE.
     ///
@@ -448,7 +448,7 @@ impl From<&CANFrame> for X200 {
 
 /// EVSE V2x
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct X208 {
     /// The circuit current measured by the EVSE.
     pub discharge_current: u8,
@@ -524,7 +524,7 @@ impl From<&CANFrame> for X208 {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct X209 {
     /// Charge/dis charge sequence control number
     sequence: u8,

@@ -11,11 +11,13 @@ use tokio::{
 };
 
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, serde::Serialize)]
 pub struct MeterState {
     pub total_w: Option<f32>,
     pub phase_w: Option<f32>,
+    #[serde(skip)]
     pub last_total_update: Option<Instant>,
+    #[serde(skip)]
     pub last_phase_update: Option<Instant>,
 
     // Charger-dedicated sub-meter (SDM230 via mbmd)
