@@ -29,21 +29,18 @@ const METER_BIAS: f32 = 0.0;
 
 static POOL: OnceCell<Database> = OnceCell::const_new();
 
-/**
+/*
+ * Outstanding TODO
  *
- * Todo:
+ * Firmware (ev_connect.rs)
+ *     Insulation tests skipped — see ev_connect.rs "insulation tests skipped !!!"
+ *     ADC SPI driver needed for differential voltage across contactors / welding detection
+ *     Review CHAdeMO shutdown procedure — OBD2 fault codes may be thrown by EV on session end
  *
- *      API
- *          Add GetParams and return error with message (add to JS)
- *          Access config (write to disk on save) (server done)
- *
- *      Config
- *          Min/max V2H SoC - web ui
- *
- *      eStop
- *          Detect input pin?
- *
+ * Web UI (+page.svelte)
+ *     Event table actions — Edit, Delete, Add Event, Update
  */
+
 async fn setup_can_interfaces() {
     log::info!("CAN: bringing up interfaces");
     for iface in &["can0", "can1"] {

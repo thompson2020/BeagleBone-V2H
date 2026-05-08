@@ -134,6 +134,14 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         assert!(chademo.x109.status.status_vehicle_connector_lock);
         // update_chademo_mutex(&chademo).await;
         // chademo.precharge();
+        // TODO: Insulation tests skipped — requires external SPI ADC for contactor differential
+        // voltage measurement and welding detection. BeagleBone internal ADC is disabled
+        // (disable_uboot_overlay_adc=1 in uEnv.txt). An external SPI ADC was planned —
+        // spidev = "0.5.2" is commented out in Cargo.toml. Chip model unknown (no schematic
+        // available); physically trace PCB to identify IC and SPI pins before implementing.
+        // Once chip is identified: uncomment spidev in Cargo.toml, write a driver wrapper,
+        // implement isolation resistance check here before raising D2, and add welding
+        // detection in shutdown() after contactors are commanded open.
         log::info!("insulation tests skipped !!!");
         chademo.pins().d2.set_value(1).unwrap();
 
@@ -169,6 +177,19 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             };
 
         // end charge ========================================================
+        //
+        // TODO: Review CHAdeMO shutdown procedure — OBD2 fault codes may be thrown by EV.
+        // Suspected causes:
+        //   1. PRE is shut down before the CAN handshake completes — EV may see DC voltage
+        //      drop before the protocol reaches its terminal state, triggering a fault.
+        //   2. x109 status 0x25 (set after contactors open) has status_station (bit 0) set
+        //      alongside the stop flag (bit 5) — may be contradictory per CHAdeMO spec.
+        //   3. x109.output_voltage is never updated during shutdown — EV receives a stale
+        //      voltage value and cross-checks it against its own measurement.
+        //   4. charging_stop_control_release() is commented out below — 0x24 (bit 5 set)
+        //      may already cover this, but worth confirming against spec.
+        // To diagnose: capture the OBD2 DTC code from the car after a session and match
+        // against CHAdeMO fault table. ERROR log below will flag x102 fault bits if set.
 
         log::warn!("End of init fn 'end charge' with exit reason | {exit_reason:?}");
         update_chademo_mutex(&chademo).await;
@@ -220,6 +241,10 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
 
                     contactors = false;
                     chademo.x109.status = X109Status::from(0x25);
+                    let x102status: u8 = chademo.x102.status.into();
+                    if chademo.x102.fault() {
+                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} — check car for DTC codes", x102status);
+                    }
                     continue;
                 }
             }
@@ -277,8 +302,12 @@ async fn charge_mode(
         } else {
             recv_send(can, chademo, false).await?;
             if !chademo.status_vehicle_charging() {
-                log::warn!("EV stopped charge");
+                let x102status: u8 = chademo.x102.status.into();
                 let state = *chademo.state();
+                log::warn!(
+                    "EV stopped charge | mode={:?} SoC={}% x102=0x{:02x} fault={} last_amps={:.1}A",
+                    state, chademo.soc(), x102status, chademo.x102.fault(), last_amps
+                );
                 break if state.is_quit() { state } else { Idle };
             }
         };
@@ -463,7 +492,12 @@ async fn v2h_requested_amps(
         let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
         let soc_target = settings.ready_to_drive_soc.min(crate::MAX_SOC);
         drop(settings);
-        if soc_target <= *chademo.soc() { 0.0 } else { (amps as f32).min(chademo.requested_charging_amps()) }
+        if soc_target <= *chademo.soc() {
+            if last_amps > 0.5 {
+                log::info!("Ready-to-drive SoC target reached ({}% >= {}%), holding at 0A", chademo.soc(), soc_target);
+            }
+            0.0
+        } else { (amps as f32).min(chademo.requested_charging_amps()) }
     } else if off_peak_charging_active {
         *dv = 0.0;
         *inner_tick = 9;
@@ -474,8 +508,12 @@ async fn v2h_requested_amps(
         let soc = *chademo.soc();
         // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
         // last_amps == 0.0 means we were already stopped — stay stopped until below deadband.
-        if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) { 0.0 }
-        else { (amps as f32).min(chademo.requested_charging_amps()) }
+        if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) {
+            if last_amps > 0.5 {
+                log::info!("Off-peak SoC limit reached ({}% >= {}%), stopping charge", soc, soc_limit);
+            }
+            0.0
+        } else { (amps as f32).min(chademo.requested_charging_amps()) }
     } else if smart_export_active {
         let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
         let soc_min = settings.smart_export_soc_min.max(crate::MIN_SOC);
@@ -483,6 +521,9 @@ async fn v2h_requested_amps(
         let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
         drop(settings);
         if *chademo.soc() <= soc_min {
+            if last_amps < -0.5 {
+                log::info!("Smart export SoC floor hit ({}% <= {}%), pausing discharge", chademo.soc(), soc_min);
+            }
             *dv = 0.0;
             *inner_tick = 9;
             0.0
@@ -498,8 +539,12 @@ async fn v2h_requested_amps(
         let amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
         let soc_limit = settings.v2h_soc_max_boost.min(crate::MAX_SOC);
         drop(settings);
-        if soc_limit <= *chademo.soc() { 0.0 }
-        else { (amps as f32).min(chademo.requested_charging_amps()) }
+        if soc_limit <= *chademo.soc() {
+            if last_amps > 0.5 {
+                log::info!("Smart charge SoC limit reached ({}% >= {}%), stopping charge", chademo.soc(), soc_limit);
+            }
+            0.0
+        } else { (amps as f32).min(chademo.requested_charging_amps()) }
     } else if ev_drain_protection_active {
         *dv = 0.0;
         *inner_tick = 9;

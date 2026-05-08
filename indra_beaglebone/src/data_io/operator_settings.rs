@@ -152,5 +152,5 @@ pub async fn update(mut new_settings: OperatorSettings) {
     if let Err(e) = save(&new_settings).await {
         log::error!("{TAG} failed to persist: {:?}", e);
     }
-    // TODO: trigger broadcast to all WS clients when broadcast channel is added
+
 }
