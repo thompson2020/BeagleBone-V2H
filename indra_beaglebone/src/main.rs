@@ -23,7 +23,7 @@ mod pre_charger;
 mod scheduler;
 
 const MAX_SOC: u8 = 100;
-const MIN_SOC: u8 = 31;
+const MIN_SOC: u8 = 10;
 const MAX_AMPS: u8 = 16;
 const METER_BIAS: f32 = 0.0;
 

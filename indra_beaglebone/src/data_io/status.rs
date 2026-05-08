@@ -4,7 +4,7 @@ use crate::{
     pre_charger::PreCharger,
 };
 use super::{meter::MeterState, operator_settings::OperatorSettings, supervisor::SupervisoryState};
-use chademo_v2::{X100, X101, X102, X108, X109, X200, X208, X209};
+use chademo_v2::{X100, X101, X102, X108, X109, X200, X201, X208, X209};
 use serde::Serialize;
 use sysfs_gpio::Pin;
 
@@ -46,6 +46,7 @@ pub struct ChademoSnapshot {
     pub x101: X101,
     pub x102: X102,
     pub x200: X200,
+    pub x201: X201,
     // EVSE → EV (sent to vehicle)
     pub x108: X108,
     pub x109: X109,
@@ -94,6 +95,7 @@ pub async fn snapshot() -> ChargerSnapshot {
         x101: chademo.x101,
         x102: chademo.x102,
         x200: chademo.x200,
+        x201: chademo.x201,
         x108: chademo.x108,
         x109: chademo.x109,
         x208: chademo.x208,

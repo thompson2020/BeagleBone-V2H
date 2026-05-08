@@ -28,6 +28,7 @@ pub async fn recv_send(
                 0x100 => chademo.x100 = X100::from(&frame),
                 0x101 => chademo.x101 = X101::from(&frame),
                 0x102 => chademo.x102 = X102::from(&frame),
+                0x201 => chademo.x201 = X201::from(&frame),
                 0x200 => {
                     chademo.x200 = X200::from(&frame);
                     break;

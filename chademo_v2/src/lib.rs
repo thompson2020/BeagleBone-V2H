@@ -440,8 +440,30 @@ impl From<&CANFrame> for X200 {
         X200 {
             maximum_discharge_current: 255 - data[0],
             minimum_discharge_voltage: u16::from_le_bytes(data[4..=5].try_into().unwrap()),
-            minimum_battery_discharge_level: 255 - data[6],
+            minimum_battery_discharge_level: data[6], // direct %, not current-style inverted
             max_remaining_capacity_for_charging: data[7],
+        }
+    }
+}
+
+/// Vehicle V2H sequence/energy status (EV → EVSE)
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
+pub struct X201 {
+    /// Charge/discharge sequence control number (mirrors X209 sequence from EVSE)
+    pub sequence: u8,
+    /// Approximate discharge completion time in minutes; 0 = not used
+    pub approx_discharge_time: u16,
+    /// Available vehicle energy in 0.1 kWh units; 0 = not used
+    pub available_energy: u16,
+}
+
+impl From<&CANFrame> for X201 {
+    fn from(frame: &CANFrame) -> Self {
+        let data = data_sanity(&frame, 0x201, 8);
+        X201 {
+            sequence:               data[0],
+            approx_discharge_time:  u16::from_le_bytes([data[1], data[2]]),
+            available_energy:       u16::from_le_bytes([data[3], data[4]]),
         }
     }
 }

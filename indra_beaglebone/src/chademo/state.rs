@@ -66,6 +66,7 @@ pub struct Chademo {
     pub x108: X108,
     pub x109: X109,
     pub x200: X200,
+    pub x201: X201,
     pub x208: X208,
     pub x209: X209,
     state: OperationMode,
@@ -106,6 +107,7 @@ impl Chademo {
             x101: X101::default(),
             x102: X102::default(),
             x200: X200::default(),
+            x201: X201::default(),
             //EVSE encode
             x109: X109::new(2, true),
             x108: X108::new(MAX_AMPS, 500, true, 435).into(),
