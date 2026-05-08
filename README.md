@@ -1,8 +1,4 @@
 # BeagleBone-V2H
-
-### My Modifications
-- Added MQTT support for meter readings (alongside existing Modbus) - Supports Hildebrand Glow, mbmd and other MQTT-based meters.
-  
 ---
 
 Functional vehicle to home bidirectional charging app based on Indra CHAdeMO home charger
@@ -13,7 +9,7 @@ Custom kernel hardware modules and configuration can be found in ./supporting
 
 Requires:
 
-* External grid energy feed for V2H
+* External grid energy feed for V2H (Easton SDM230 or meter writing to modbus)
 
 WIP:
 
@@ -30,3 +26,7 @@ Crosscompile using [ZigBuild](https://github.com/rust-cross/cargo-zigbuild)
 ```cargo zigbuild --target arm-unknown-linux-musleabihf --release --features tracing,logging-verbose```
     tracing - to send debug messages to the v2h_webui
     logging-verbose - to get more log messages
+
+### My Modifications
+- Added MQTT support for meter readings (alongside existing Modbus) - Supports Hildebrand Glow, mbmd and other MQTT-based meters.
+  
