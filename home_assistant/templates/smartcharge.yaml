@@ -28,8 +28,15 @@
           {% elif zappi_w > 0 %}
             {{ 1 }}
           {% else %}
-            {% set mins_to_block_end = 30 - (now().minute % 30) %}
-            {% set block_end_ts = now_ts + (mins_to_block_end * 60) - now().second %}
-            {{ 1 if now_ts < ([block_end_ts, current_end_ts] | min) else 0 }}
+            {# Grace period: stay 1 until end of the 30-min slot in which charging stopped.
+               Use Zappi sensor's last_changed — HA restores this correctly after restart,
+               unlike trigger-based template sensors which reset last_changed to boot time. #}
+            {% set zappi_entity = states.sensor.myenergi_zappi_22323585_internal_load_ct1 %}
+            {% set stop_ts   = as_timestamp(zappi_entity.last_changed) if zappi_entity else 0 %}
+            {% set now_slot  = (now().hour * 60 + now().minute) // 30 %}
+            {% set stop_hour = (stop_ts | timestamp_custom('%H', true)) | int %}
+            {% set stop_min  = (stop_ts | timestamp_custom('%M', true)) | int %}
+            {% set stop_slot = (stop_hour * 60 + stop_min) // 30 %}
+            {{ 1 if now_slot == stop_slot else 0 }}
           {% endif %}
         {% endif %}
