@@ -1,0 +1,28 @@
+type: vertical-stack
+cards:
+  - type: custom:octopus-energy-rates-card
+    currentEntity: sensor.agile_export_current_day_rates
+    nextEntity: sensor.agile_export_next_day_rates
+    cols: 2
+    hour12: false
+    showday: true
+    showpast: true
+    title: Agile Export Rates
+    unitstr: p
+    lowlimit: 5
+    mediumlimit: 15
+    highlimit: 25
+    roundUnits: 1
+    cheapest: false
+    multiplier: 100
+
+  - type: entities
+    title: Agile Export Rate Data
+    show_header_toggle: false
+    entities:
+      - entity: sensor.agile_export_current_rate
+        name: Current Rate
+      - entity: sensor.agile_export_current_day_rates
+        name: Today (slot count)
+      - entity: sensor.agile_export_next_day_rates
+        name: Tomorrow (slot count)

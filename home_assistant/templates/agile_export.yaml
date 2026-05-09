@@ -1,0 +1,72 @@
+- sensor:
+    - name: "agile_export_current_day_rates"
+      state: "{{ state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | count }}"
+      attributes:
+        rates: >
+          {% set results = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) %}
+          {% set ns = namespace(rates=[]) %}
+          {% for r in results %}
+            {% set ns.rates = ns.rates + [{'start': r.valid_from, 'end': r.valid_to, 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
+          {% endfor %}
+          {{ ns.rates }}
+        min_rate: >
+          {% set vals = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | min) / 100) | round(4) if vals | count > 0 else 0 }}
+        max_rate: >
+          {% set vals = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | max) / 100) | round(4) if vals | count > 0 else 0 }}
+        average_rate: >
+          {% set vals = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | sum) / (vals | count) / 100) | round(4) if vals | count > 0 else 0 }}
+        tariff_code: "E-1R-AGILE-OUTGOING-19-05-13-B"
+
+    - name: "agile_export_next_day_rates"
+      state: "{{ state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | count }}"
+      attributes:
+        rates: >
+          {% set results = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) %}
+          {% set ns = namespace(rates=[]) %}
+          {% for r in results %}
+            {% set ns.rates = ns.rates + [{'start': r.valid_from, 'end': r.valid_to, 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
+          {% endfor %}
+          {{ ns.rates }}
+        min_rate: >
+          {% set vals = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | min) / 100) | round(4) if vals | count > 0 else 0 }}
+        max_rate: >
+          {% set vals = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | max) / 100) | round(4) if vals | count > 0 else 0 }}
+        average_rate: >
+          {% set vals = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | map(attribute='value_inc_vat') | list %}
+          {{ ((vals | sum) / (vals | count) / 100) | round(4) if vals | count > 0 else 0 }}
+        tariff_code: "E-1R-AGILE-OUTGOING-19-05-13-B"
+
+- trigger:
+    - platform: time_pattern
+      minutes: "/30"
+    - platform: state
+      entity_id: sensor.agile_export_current_day_rates
+  sensor:
+    - name: "agile_export_current_rate"
+      unit_of_measurement: "p/kWh"
+      state: >
+        {% set rates = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+        {% set now_ts = now().timestamp() %}
+        {% set ns = namespace(rate=none) %}
+        {% for r in rates %}
+          {% if as_timestamp(r.start) <= now_ts < as_timestamp(r.end) %}
+            {% set ns.rate = r.value_inc_vat * 100 %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.rate | round(2) if ns.rate is not none else 0 }}
+      attributes:
+        rate_end: >
+          {% set rates = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+          {% set now_ts = now().timestamp() %}
+          {% set ns = namespace(end=none) %}
+          {% for r in rates %}
+            {% if as_timestamp(r.start) <= now_ts < as_timestamp(r.end) %}
+              {% set ns.end = r.end %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.end }}

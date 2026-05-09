@@ -1,0 +1,23 @@
+alias: Publish SmartExport(Excess Solar) → mbmd MQTT
+description: >
+  Signal is 1 when current Agile export rate exceeds cheapest overnight import
+  rate (1× threshold, no multiplier — no round-trip loss on direct solar export).
+  Rust code acts on this only when solar export mode is enabled.
+triggers:
+  - trigger: state
+    entity_id: sensor.smart_export_excess_solar_status
+    for:
+      seconds: 1
+  - trigger: time_pattern
+    seconds: /30
+actions:
+  - action: mqtt.publish
+    data:
+      topic: indra_from_ha/smart_export_excess_solar/request
+      qos: 0
+      retain: true
+      payload: |
+        {
+          "smart_export_excess_solar": {{ states('sensor.smart_export_excess_solar_status') | int }}
+        }
+mode: single

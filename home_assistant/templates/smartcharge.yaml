@@ -1,0 +1,35 @@
+- trigger:
+    - platform: state
+      entity_id: sensor.myenergi_zappi_22323585_internal_load_ct1
+    - platform: state
+      entity_id: binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak
+    - platform: time_pattern
+      minutes: "/1"
+  sensor:
+    - name: "smartcharge_status_basic"
+      state: >
+        {{ 1 if (states('sensor.myenergi_zappi_22323585_internal_load_ct1') | float(0) > 0) else 0 }}
+
+    - name: "smartcharge_status"
+      unit_of_measurement: ""
+      state: >
+        {% set off_peak = is_state('binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak', 'on') %}
+        {% if not off_peak %}
+          {{ 0 }}
+        {% else %}
+          {% set zappi_w = states('sensor.myenergi_zappi_22323585_internal_load_ct1') | float(0) %}
+          {% set now_ts = now().timestamp() %}
+          {% set current_end_ts = as_timestamp(
+              state_attr('binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak', 'current_end')
+              | default('1970-01-01T00:00:00+00:00')
+            ) %}
+          {% if now_ts >= current_end_ts %}
+            {{ 0 }}
+          {% elif zappi_w > 0 %}
+            {{ 1 }}
+          {% else %}
+            {% set mins_to_block_end = 30 - (now().minute % 30) %}
+            {% set block_end_ts = now_ts + (mins_to_block_end * 60) - now().second %}
+            {{ 1 if now_ts < ([block_end_ts, current_end_ts] | min) else 0 }}
+          {% endif %}
+        {% endif %}

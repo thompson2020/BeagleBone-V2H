@@ -1,0 +1,13 @@
+- trigger:
+    - platform: state
+      entity_id: sensor.agile_export_current_rate
+    - platform: state
+      entity_id: sensor.agile_import_cheapest_rate
+    - platform: time_pattern
+      minutes: "/30"
+  sensor:
+    - name: "smart_export_excess_solar_status"
+      state: >
+        {% set export_rate = states('sensor.agile_export_current_rate') | float(0) %}
+        {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {{ 1 if export_rate > 0 and cheapest > 0 and export_rate > cheapest else 0 }}

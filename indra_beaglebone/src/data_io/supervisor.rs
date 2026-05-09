@@ -161,14 +161,15 @@ async fn evaluate_smart_charge() {
         return;
     }
 
-    // Export takes priority — do not charge during an active export slot
+    // Export takes priority — do not charge during an active export slot.
+    // smart_export_excess_solar does not block smart_charge (no round-trip loss conflict).
     let sup_snap = SUPERVISORY.read().await;
-    let export_blocked = sup_snap.smart_export_active || sup_snap.smart_export_excess_solar_active;
+    let export_blocked = sup_snap.smart_export_active;
     drop(sup_snap);
     if export_blocked {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (smart_export or smart_export_excess_solar active)");
+            log::info!("Supervisor: smart_charge_active → false (smart_export active)");
             sup.smart_charge_active = false;
         }
         return;
@@ -412,11 +413,10 @@ async fn evaluate_ev_drain_protection() {
         return;
     }
 
-    // Yield to higher-priority signals — export and charge are already evaluated this cycle
+    // Yield to higher-priority signals — export and charge are already evaluated this cycle.
+    // smart_export_excess_solar does not block ev_drain_protection.
     let sup_snap = SUPERVISORY.read().await;
-    let blocked = sup_snap.smart_export_active
-        || sup_snap.smart_export_excess_solar_active
-        || sup_snap.smart_charge_active;
+    let blocked = sup_snap.smart_export_active || sup_snap.smart_charge_active;
     drop(sup_snap);
 
     if blocked {

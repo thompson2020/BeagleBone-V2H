@@ -1,0 +1,66 @@
+type: grid
+cards:
+  - type: markdown
+    content: |
+      ## Smart Export Status
+
+      **Logic — turn ON when all true:**
+      - Current Agile export rate > 0
+      - Export rate ≥ cheapest import rate × multiplier
+
+      **Cheapest import rate:** minimum rate across all today's import slots
+
+      **Multiplier (default 200%):** export must be at least 2× cheapest import.
+      Covers ~85% round-trip battery efficiency plus profit margin.
+      e.g. 6.9p import × 2.0 = 13.8p/kWh threshold to export
+
+      Automation publishes to `indra_from_ha/smart_export/request`
+
+  - type: markdown
+    content: |
+      Settings → Automations
+
+      **Publish SmartExport → mbmd MQTT**
+
+  - type: entities
+    title: Inputs
+    show_header_toggle: false
+    entities:
+      - entity: sensor.agile_export_current_rate
+        name: Export Rate (p/kWh)
+      - entity: sensor.agile_import_cheapest_rate
+        name: Cheapest Import Rate (p/kWh)
+
+  - type: vertical-stack
+    cards:
+      - type: tile
+        entity: sensor.agile_export_current_rate
+        name: Current Export Rate
+        icon: mdi:transmission-tower-export
+        state_content: state
+        vertical: true
+      - type: markdown
+        content: >
+          **Rate period ends:** {{
+          state_attr('sensor.agile_export_current_rate', 'rate_end')
+          | as_timestamp | timestamp_custom('%H:%M') }}
+
+
+          **Threshold:** {{
+          (states('sensor.agile_import_cheapest_rate') | float(0)
+          * states('input_number.smart_export_multiplier') | float(200) / 100)
+          | round(1) }}p/kWh
+
+  - type: entities
+    title: Settings
+    show_header_toggle: false
+    entities:
+      - entity: input_number.smart_export_multiplier
+        name: Rate Multiplier
+
+  - type: entities
+    title: Smart Export
+    show_header_toggle: false
+    entities:
+      - entity: sensor.smart_export_status
+        name: Smart Export Status

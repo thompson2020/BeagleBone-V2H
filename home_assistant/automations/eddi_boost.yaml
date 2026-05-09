@@ -1,0 +1,29 @@
+alias: Publish SmartCharge → Eddi Boost Control
+description: Turn Eddi boost ON when smartcharge turns on, OFF when it turns off
+triggers:
+  - trigger: state
+    entity_id: sensor.smartcharge_status
+    for:
+      seconds: 1
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: sensor.smartcharge_status
+            state: "1"
+          - condition: state
+            entity_id: sensor.smart_export_status
+            state: "0"
+        sequence:
+          - action: script.eddi_boost
+      - conditions:
+          - condition: state
+            entity_id: sensor.smartcharge_status
+            state: "0"
+        sequence:
+          - action: script.eddi_boost_cancel
+  - action: logbook.log
+    data:
+      name: SmartCharge → Eddi
+      message: Smartcharge is {{ states('sensor.smartcharge_status') }} → Boost updated
+mode: single

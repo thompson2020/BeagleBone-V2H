@@ -1,0 +1,25 @@
+# Agile Outgoing Export Rates — fetched direct from Octopus public API (no auth)
+# Product: AGILE-OUTGOING-19-05-13  |  Region: East Midlands (GSP B)
+# Values from API are p/kWh; the template sensors in templates/agile_export.yaml
+# divide by 100 to store as £/kWh, matching the existing import event entity format.
+# Next-day rates are published by Octopus ~16:00–18:00 UK time; until then count=0.
+
+- platform: rest
+  name: "agile_export_current_day_raw"
+  resource_template: >-
+    https://api.octopus.energy/v1/products/AGILE-OUTGOING-19-05-13/electricity-tariffs/E-1R-AGILE-OUTGOING-19-05-13-B/standard-unit-rates/?page_size=48&ordering=valid_from&period_from={{ utcnow().replace(hour=0,minute=0,second=0,microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ') }}&period_to={{ utcnow().replace(hour=23,minute=59,second=59,microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ') }}
+  scan_interval: 3600
+  timeout: 10
+  value_template: "{{ value_json.count | default(0) }}"
+  json_attributes:
+    - results
+
+- platform: rest
+  name: "agile_export_next_day_raw"
+  resource_template: >-
+    https://api.octopus.energy/v1/products/AGILE-OUTGOING-19-05-13/electricity-tariffs/E-1R-AGILE-OUTGOING-19-05-13-B/standard-unit-rates/?page_size=48&ordering=valid_from&period_from={{ (utcnow().replace(hour=0,minute=0,second=0,microsecond=0)+timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%SZ') }}&period_to={{ (utcnow().replace(hour=23,minute=59,second=59,microsecond=0)+timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%SZ') }}
+  scan_interval: 1800
+  timeout: 10
+  value_template: "{{ value_json.count | default(0) }}"
+  json_attributes:
+    - results

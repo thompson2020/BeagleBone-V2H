@@ -1,0 +1,20 @@
+alias: Publish SmartExport → mbmd MQTT
+description: Publish smart export 0/1 signal based on Agile export rate vs cheapest import rate
+triggers:
+  - trigger: state
+    entity_id: sensor.smart_export_status
+    for:
+      seconds: 1
+  - trigger: time_pattern
+    seconds: /30
+actions:
+  - action: mqtt.publish
+    data:
+      topic: indra_from_ha/smart_export/request
+      qos: 0
+      retain: true
+      payload: |
+        {
+          "smart_export": {{ states('sensor.smart_export_status') | int }}
+        }
+mode: single

@@ -1,0 +1,20 @@
+alias: Publish SmartCharge → mbmd MQTT
+description: Send Zappi + Octopus smart charge data as clean JSON
+triggers:
+  - trigger: state
+    entity_id: sensor.smartcharge_status
+    for:
+      seconds: 1
+  - trigger: time_pattern
+    seconds: /30
+actions:
+  - action: mqtt.publish
+    data:
+      topic: indra_from_ha/smart_charge/request
+      qos: 0
+      retain: true
+      payload: |
+        {
+          "smart_charge": {{ states('sensor.smartcharge_status') | int }}
+        }
+mode: single

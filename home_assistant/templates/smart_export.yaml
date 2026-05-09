@@ -1,0 +1,24 @@
+- trigger:
+    - platform: state
+      entity_id: event.octopus_energy_electricity_25j0059396_1100003642142_current_day_rates
+    - platform: state
+      entity_id: sensor.agile_export_current_rate
+    - platform: state
+      entity_id: input_number.smart_export_multiplier
+    - platform: time_pattern
+      minutes: "/30"
+  sensor:
+    - name: "agile_import_cheapest_rate"
+      unit_of_measurement: "p/kWh"
+      state: >
+        {% set rates = state_attr('event.octopus_energy_electricity_25j0059396_1100003642142_current_day_rates', 'rates') | default([], true) %}
+        {% set vals = rates | map(attribute='value_inc_vat') | list %}
+        {{ ((vals | min) * 100) | round(2) if vals | count > 0 else 0 }}
+
+    - name: "smart_export_status"
+      state: >
+        {% set export_rate = states('sensor.agile_export_current_rate') | float(0) %}
+        {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {% set multiplier = states('input_number.smart_export_multiplier') | float(200) %}
+        {% set threshold  = cheapest * (multiplier / 100) %}
+        {{ 1 if export_rate > 0 and cheapest > 0 and export_rate >= threshold else 0 }}
