@@ -161,8 +161,11 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         chademo.x109.status = X109Status::from(0x05);
         assert!(chademo.x109.status.status_vehicle_connector_lock);
         assert!(chademo.x109.status.status_station);
+        // Reflect the 1A PRE init setpoint in x109/x208 so the EV sees a valid current
+        // request via CAN and sets status_vehicle_charging = true to start the session.
+        chademo.update_amps(1i16);
         update_panel_leds(&led_tx, &chademo, &mut last_logo).await;
-        // update_chademo_mutex(&chademo).await;
+        update_chademo_mutex(&chademo).await;
 
         log::info!("            Entering charge loop!");
         let exit_reason =
@@ -286,7 +289,7 @@ async fn charge_mode(
     let mut mode_rx = mode_rx.lock().await;
     let mut last_soc = *chademo.soc();
     let mut last_volts = 0.0;
-    let mut last_amps = 0.0;
+    let mut last_amps = PREDATA.lock().await.get_dc_setpoint_amps();
     let mut last_meter = 0.01;
     let mut counter = 0;
 
@@ -323,7 +326,8 @@ async fn charge_mode(
                 chademo.soc(),
                 chademo.x102.charging_current_request
             );
-            counter = 0
+            counter = 0;
+            update_chademo_mutex(&*chademo).await; // keep UI current even when amps/SoC unchanged
         }
         counter += 1;
         inner_tick += 1;
@@ -398,6 +402,9 @@ async fn charge_mode(
 
         if last_amps != charging_current_request {
             last_amps = charging_current_request;
+            // Keep x109.output_current / x208.discharge_current in sync with the PRE
+            // setpoint so the EV always sees the correct current request via CAN.
+            chademo.update_amps(charging_current_request as i16);
             log_error!(
                 "",
                 pre_tx
