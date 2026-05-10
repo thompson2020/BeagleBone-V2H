@@ -1,3 +1,8 @@
+- sensor:
+    - name: "octopus_energy_electricity_25j0059396_1100003642142_off_peak_current_end"
+      state: >
+        {{ state_attr('binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak', 'current_end') | default('none', true) }}
+
 - trigger:
     - platform: state
       entity_id: sensor.myenergi_zappi_22323585_internal_load_ct1

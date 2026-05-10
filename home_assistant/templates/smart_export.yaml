@@ -15,6 +15,13 @@
         {% set vals = rates | map(attribute='value_inc_vat') | list %}
         {{ ((vals | min) * 100) | round(2) if vals | count > 0 else 0 }}
 
+    - name: "smart_export_threshold"
+      unit_of_measurement: "p/kWh"
+      state: >
+        {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {% set multiplier = states('input_number.smart_export_multiplier') | float(200) %}
+        {{ (cheapest * (multiplier / 100)) | round(2) if cheapest > 0 else 0 }}
+
     - name: "smart_export_status"
       state: >
         {% set export_rate = states('sensor.agile_export_current_rate') | float(0) %}

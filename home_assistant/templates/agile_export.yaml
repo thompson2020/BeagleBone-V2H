@@ -3,10 +3,10 @@
       state: "{{ state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | count }}"
       attributes:
         rates: >
-          {% set results = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) %}
+          {% set results = state_attr('sensor.agile_export_current_day_raw', 'results') | default([], true) | sort(attribute='valid_from') %}
           {% set ns = namespace(rates=[]) %}
           {% for r in results %}
-            {% set ns.rates = ns.rates + [{'start': r.valid_from, 'end': r.valid_to, 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
+            {% set ns.rates = ns.rates + [{'start': as_local(as_datetime(r.valid_from)).isoformat(), 'end': as_local(as_datetime(r.valid_to)).isoformat(), 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
           {% endfor %}
           {{ ns.rates }}
         min_rate: >
@@ -24,10 +24,10 @@
       state: "{{ state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | count }}"
       attributes:
         rates: >
-          {% set results = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) %}
+          {% set results = state_attr('sensor.agile_export_next_day_raw', 'results') | default([], true) | sort(attribute='valid_from') %}
           {% set ns = namespace(rates=[]) %}
           {% for r in results %}
-            {% set ns.rates = ns.rates + [{'start': r.valid_from, 'end': r.valid_to, 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
+            {% set ns.rates = ns.rates + [{'start': as_local(as_datetime(r.valid_from)).isoformat(), 'end': as_local(as_datetime(r.valid_to)).isoformat(), 'value_inc_vat': (r.value_inc_vat / 100) | round(6)}] %}
           {% endfor %}
           {{ ns.rates }}
         min_rate: >
