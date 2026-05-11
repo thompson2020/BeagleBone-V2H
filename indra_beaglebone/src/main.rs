@@ -97,8 +97,10 @@ async fn main() -> Result<(), &'static str> {
 
     #[cfg(feature = "logging-verbose")]
     logger::init(log::LevelFilter::Trace).expect("Logger init failed");
-    #[cfg(not(feature = "logging-verbose"))]
+    #[cfg(all(feature = "logging-debug", not(feature = "logging-verbose")))]
     logger::init(log::LevelFilter::Debug).expect("Logger init failed");
+    #[cfg(not(any(feature = "logging-verbose", feature = "logging-debug")))]
+    logger::init(log::LevelFilter::Info).expect("Logger init failed");
 
     log::info!("=== Indra BeagleBone service starting ===");
     log::info!("Built: {}", build_time.format("%Y-%m-%d %H:%M:%S"));

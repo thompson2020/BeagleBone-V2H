@@ -142,7 +142,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
             log_error!(
                 "MQTT Publishing Chademo Data:",
                 client_send
-                    .publish(topic, QoS::AtLeastOnce, true, msg)
+                    .publish(topic, QoS::AtLeastOnce, false, msg)
                     .await
                     .map_err(|e| IndraError::MqttSend(e))
             );
@@ -154,31 +154,44 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
     }
 }
 
-/// Extract a value from either a plain number ("1") or a JSON payload with a
-/// dotted field path ("state.value").  Returns None and logs a warning on failure.
+/// Extract a numeric value from a payload. Handles:
+///   "1"                          — plain number string
+///   true / false                 — bare JSON boolean (→ 1.0 / 0.0)
+///   {"field": 1}                 — JSON object, dotted path
+///   {"field": true}              — JSON object with boolean value
 fn extract_value(payload: &str, field: &str) -> Option<f32> {
     use serde_json::Value;
     if let Ok(v) = payload.parse::<f32>() {
         return Some(v);
     }
-    if let Ok(json) = serde_json::from_str::<Value>(payload) {
-        let mut cur = &json;
-        for key in field.split('.') {
-            cur = match cur.get(key) {
-                Some(v) => v,
-                None => {
-                    log::warn!("MQTT: JSON path '{}' not found | payload: {}", field, payload);
-                    return None;
-                }
-            };
+    let json = match serde_json::from_str::<Value>(payload) {
+        Ok(v) => v,
+        Err(_) => {
+            log::warn!("MQTT: payload is not a number or JSON | {}", payload);
+            return None;
         }
-        if let Some(v) = cur.as_f64() {
-            return Some(v as f32);
-        }
-        log::warn!("MQTT: JSON field '{}' is not a number | payload: {}", field, payload);
-        return None;
+    };
+    // Bare boolean: true → 1.0, false → 0.0
+    if let Some(b) = json.as_bool() {
+        return Some(if b { 1.0 } else { 0.0 });
     }
-    log::warn!("MQTT: payload is not a number or JSON | {}", payload);
+    let mut cur = &json;
+    for key in field.split('.') {
+        cur = match cur.get(key) {
+            Some(v) => v,
+            None => {
+                log::warn!("MQTT: JSON path '{}' not found | payload: {}", field, payload);
+                return None;
+            }
+        };
+    }
+    if let Some(v) = cur.as_f64() {
+        return Some(v as f32);
+    }
+    if let Some(b) = cur.as_bool() {
+        return Some(if b { 1.0 } else { 0.0 });
+    }
+    log::warn!("MQTT: JSON field '{}' is not a number or bool | payload: {}", field, payload);
     None
 }
 
@@ -186,7 +199,7 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
 async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, mode_tx: &ChademoTx) {
     let payload = String::from_utf8_lossy(&msg.payload);
     let payload = payload.trim().replace(['\n', '\r'], "");
-    log::debug!("MQTT: publish | topic: '{}' payload: '{}'", msg.topic, payload);
+    log::debug!("MQTT recv | topic: '{}' payload: '{}'", msg.topic, payload);
 
     let command_topic = format!("{}/command", cfg.base_topic);
     if msg.topic == command_topic {
@@ -205,7 +218,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_charge_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_charge_request(enabled, false);
-            log::debug!("MQTT: smart_charge_request → {}", enabled);
+            log::info!("MQTT: smart_charge_request → {}", enabled);
         }
     }
 
@@ -213,7 +226,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_ev_drain_protection_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_ev_drain_protection_request(enabled, false);
-            log::debug!("MQTT: ev_drain_protection_request → {}", enabled);
+            log::info!("MQTT: ev_drain_protection_request → {}", enabled);
         }
     }
 
@@ -221,7 +234,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_request(enabled, false);
-            log::debug!("MQTT: smart_export_request → {}", enabled);
+            log::info!("MQTT: smart_export_request → {}", enabled);
         }
     }
 
@@ -229,7 +242,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_excess_solar_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_excess_solar_request(enabled, false);
-            log::debug!("MQTT: smart_export_excess_solar_request → {}", enabled);
+            log::info!("MQTT: smart_export_excess_solar_request → {}", enabled);
         }
     }
 }
@@ -409,7 +422,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         "value_template": "{{ value_json.chademo.state }}",
         "command_topic": cmd_topic,
         "command_template": "{\"cmd\":{\"SetMode\":\"{{ value }}\"}}",
-        "options": ["Idle", "V2h", "Charge"],
+        "options": ["Idle", "V2h", "Charge", "Discharge"],
         "availability_topic": avail,
         "payload_available": "online",
         "payload_not_available": "offline",
