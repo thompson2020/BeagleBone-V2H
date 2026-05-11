@@ -1,3 +1,4 @@
+pub(crate) mod commands;
 pub(crate) mod config;
 pub(crate) mod operator_settings;
 pub(crate) mod supervisor;

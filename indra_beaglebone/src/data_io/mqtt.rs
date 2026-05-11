@@ -1,11 +1,12 @@
-use crate::{error::IndraError, log_error};
+use crate::{error::IndraError, log_error, statics::ChademoTx};
+use super::commands::Instruction;
 use std::time::Instant;
 use rumqttc::AsyncClient;
 use super::config::MqttConfig;
 use super::supervisor::SUPERVISORY;
 use tokio::time::{sleep, Duration};
 
-pub async fn mqtt_task(mqtt_config: MqttConfig) -> Result<(), IndraError> {
+pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<(), IndraError> {
     use rumqttc::{AsyncClient, MqttOptions, QoS};
 
     log::info!("Starting thread: mqtt_task   | {}", tokio::task::id());
@@ -34,6 +35,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig) -> Result<(), IndraError> {
     let mqtt_config_clone = mqtt_config.clone();
     // Clone the client into the spawn so it can resubscribe after reconnections.
     let client_for_reconnect = client.clone();
+    let mode_tx_for_spawn = mode_tx.clone();
 
     tokio::spawn(async move {
         use rumqttc::Event;
@@ -87,9 +89,18 @@ pub async fn mqtt_task(mqtt_config: MqttConfig) -> Result<(), IndraError> {
                     } else {
                         log::info!("MQTT: subscribed | {}", mqtt_config_clone.mqtt_smart_export_excess_solar_topic);
                     }
+                    let cmd_topic = format!("{}/command", mqtt_config_clone.base_topic);
+                    if let Err(e) = client_for_reconnect
+                        .subscribe(&cmd_topic, QoS::AtLeastOnce)
+                        .await
+                    {
+                        log::error!("MQTT: failed to subscribe to command topic | {e:?}");
+                    } else {
+                        log::info!("MQTT: subscribed | {}", cmd_topic);
+                    }
                 }
                 Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg))) => {
-                    handle_publish(msg, &mqtt_config_clone).await;
+                    handle_publish(msg, &mqtt_config_clone, &mode_tx_for_spawn).await;
                 }
                 Ok(_) => {}
                 Err(e) => {
@@ -172,11 +183,23 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
 }
 
 /// Handle a single MQTT Publish message.
-/// handle_smart_charge_change is spawned so the event loop is not blocked by its sleeps.
-async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig) {
+async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, mode_tx: &ChademoTx) {
     let payload = String::from_utf8_lossy(&msg.payload);
     let payload = payload.trim().replace(['\n', '\r'], "");
     log::debug!("MQTT: publish | topic: '{}' payload: '{}'", msg.topic, payload);
+
+    let command_topic = format!("{}/command", cfg.base_topic);
+    if msg.topic == command_topic {
+        match serde_json::from_str::<Instruction>(&payload) {
+            Ok(inst) => {
+                if !super::commands::dispatch(inst.cmd, mode_tx).await {
+                    log::warn!("MQTT: command not supported | {payload}");
+                }
+            }
+            Err(e) => log::warn!("MQTT command: parse error | {e} | {payload}"),
+        }
+        return;
+    }
 
     if msg.topic == cfg.mqtt_smart_charge_topic {
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_charge_field) {
@@ -376,6 +399,23 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         });
         publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", id), payload).await;
     }
+
+    // Mode select — allows HA to change mode via v2h/command
+    let cmd_topic = format!("{}/command", cfg.base_topic);
+    let mode_select = json!({
+        "unique_id": "v2h_mode",
+        "name": "Mode",
+        "state_topic": state,
+        "value_template": "{{ value_json.chademo.state }}",
+        "command_topic": cmd_topic,
+        "command_template": "{\"cmd\":{\"SetMode\":\"{{ value }}\"}}",
+        "options": ["Idle", "V2h", "Charge"],
+        "availability_topic": avail,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "device": device,
+    });
+    publish_one_discovery(client, "homeassistant/select/v2h_mode/config".to_string(), mode_select).await;
 }
 
 async fn start_staleness_checker(mqtt_config: MqttConfig) {

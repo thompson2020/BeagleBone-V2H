@@ -1,8 +1,8 @@
 use crate::{
     chademo::state::CHADEMO,
     data_io::{
-        db::{ChademoDbRow, Parameters},
-        operator_settings::{update as update_settings, OperatorSettings},
+        commands::{Cmd, Instruction},
+        db::ChademoDbRow,
         status::{snapshot, ChargerSnapshot},
     },
     global_state::OperationMode,
@@ -11,7 +11,7 @@ use crate::{
     POOL,
 };
 use futures_util::{SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     io::Error,
     sync::{
@@ -171,80 +171,57 @@ async fn process_ws_message(
     // {"cmd": {"SetEvents": [{"time": "00:01:02", "action": "Charge"}, ...]}}
     // {"cmd": {"SetSettings": {...}}}
     // {"cmd": {"GetRecords": {parameters...}}}
-    match serde_json::from_str::<Instruction>(cmd) {
-        Ok(d) => match d.cmd {
-            Cmd::SetMode(mode) => {
-                log::info!("WS SetMode: {mode:?}");
-                if let Err(e) = mode_tx.send(mode).await {
-                    log::error!("SetMode channel error: {e}");
-                }
-                Ok(Message::Text(
-                    serde_json::to_string(&Response::Mode(mode)).unwrap(),
-                ))
-            }
-            Cmd::GetMode => {
-                let mode = *CHADEMO.lock().await.state();
-                Ok(Message::Text(
-                    serde_json::to_string(&Response::Mode(mode)).unwrap(),
-                ))
-            }
-            Cmd::SetEvents(events) => {
-                log::info!("WS SetEvents: {events:?}");
-                if let Err(e) = events_tx.send(events).await {
-                    log::error!("SetEvents channel error: {e}");
-                    return Ok(Message::Text(BAD_ACK.to_string()));
-                }
-                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
-            }
-            Cmd::GetEvents => {
-                match get_eventfile_sync() {
-                    Ok(events) => Ok(Message::Text(
-                        serde_json::to_string(&Response::Events(events)).unwrap(),
-                    )),
-                    Err(e) => {
-                        log::error!("GetEvents error: {e:?}");
-                        Ok(Message::Text(BAD_ACK.to_string()))
-                    }
-                }
-            }
-            Cmd::SetSettings(new_settings) => {
-                log::info!("[OPSETTINGS] SetSettings via WebSocket");
-                update_settings(new_settings).await;
-                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
-            }
-            Cmd::StartLogs => {
-                logging.store(true, Ordering::Relaxed);
-                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
-            }
-            Cmd::StopLogs => {
-                logging.store(false, Ordering::Relaxed);
-                Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
-            }
-            Cmd::GetRecords(params) => {
-                if let Some(db) = POOL.get() {
-                    match db.process_request(params).await {
-                        Ok(rows) => {
-                            log::info!("GetRecords: {} rows returned", rows.len());
-                            Ok(Message::Text(
-                                serde_json::to_string(&Response::Records(rows)).unwrap(),
-                            ))
-                        }
-                        Err(e) => {
-                            log::error!("GetRecords db error: {e:?}");
-                            Ok(Message::Text(BAD_ACK.to_string()))
-                        }
-                    }
-                } else {
-                    log::error!("GetRecords: DB pool not initialised");
-                    Ok(Message::Text(BAD_ACK.to_string()))
-                }
-            }
-        },
+    let inst = match serde_json::from_str::<Instruction>(cmd) {
+        Ok(i) => i,
         Err(e) => {
             log::error!("WS deserialise error: {cmd} — {e:?}");
-            Ok(Message::Text(BAD_ACK.to_string()))
+            return Ok(Message::Text(BAD_ACK.to_string()));
         }
+    };
+
+    // WS-only queries — need a response sent back over the socket
+    match &inst.cmd {
+        Cmd::GetMode => {
+            let mode = *CHADEMO.lock().await.state();
+            return Ok(Message::Text(serde_json::to_string(&Response::Mode(mode)).unwrap()));
+        }
+        Cmd::GetEvents => {
+            return match get_eventfile_sync() {
+                Ok(events) => Ok(Message::Text(serde_json::to_string(&Response::Events(events)).unwrap())),
+                Err(e) => { log::error!("GetEvents: {e:?}"); Ok(Message::Text(BAD_ACK.to_string())) }
+            };
+        }
+        Cmd::GetRecords(params) => {
+            if let Some(db) = POOL.get() {
+                return match db.process_request(params.clone()).await {
+                    Ok(rows) => {
+                        log::info!("GetRecords: {} rows", rows.len());
+                        Ok(Message::Text(serde_json::to_string(&Response::Records(rows)).unwrap()))
+                    }
+                    Err(e) => { log::error!("GetRecords: {e:?}"); Ok(Message::Text(BAD_ACK.to_string())) }
+                };
+            }
+            log::error!("GetRecords: DB pool not initialised");
+            return Ok(Message::Text(BAD_ACK.to_string()));
+        }
+        Cmd::SetEvents(_) => {
+            if let Cmd::SetEvents(events) = inst.cmd {
+                log::info!("WS SetEvents: {events:?}");
+                if let Err(e) = events_tx.send(events).await {
+                    log::error!("SetEvents channel: {e}");
+                    return Ok(Message::Text(BAD_ACK.to_string()));
+                }
+            }
+            return Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()));
+        }
+        Cmd::StartLogs => { logging.store(true,  Ordering::Relaxed); return Ok(Message::Text(r#"{"ack":"ok"}"#.to_string())); }
+        Cmd::StopLogs  => { logging.store(false, Ordering::Relaxed); return Ok(Message::Text(r#"{"ack":"ok"}"#.to_string())); }
+        _ => {}
     }
+
+    // Shared mutations — same logic as MQTT path
+    crate::data_io::commands::dispatch(inst.cmd, mode_tx).await;
+    Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
 }
 
 #[cfg(test)]
@@ -282,24 +259,6 @@ mod test {
             }
         };
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-enum Cmd {
-    SetMode(OperationMode),
-    #[default]
-    GetMode,
-    SetEvents(Events),
-    GetEvents,
-    GetRecords(Parameters),
-    SetSettings(OperatorSettings),
-    StartLogs,
-    StopLogs,
-}
-
-#[derive(Serialize, Deserialize, Default, Debug)]
-struct Instruction {
-    cmd: Cmd,
 }
 
 #[derive(Serialize, Debug)]
