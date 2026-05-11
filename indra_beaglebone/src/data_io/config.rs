@@ -26,9 +26,7 @@ pub struct MqttConfig {
     pub client_id: String,
     pub username: String,
     pub password: String,
-    pub interval: u32,
-    pub topic: String,
-    pub sub: String,
+    pub base_topic: String,  // Sub-topics: {base}/status  {base}/command  {base}/availability
 
  
 

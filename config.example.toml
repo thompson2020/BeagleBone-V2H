@@ -1,49 +1,53 @@
-# rename to config.toml
+# config.example.toml — copy to config.toml and fill in your values.
+# config.toml is gitignored so credentials are never committed.
 
 [mqtt]
 enabled = true
-host = "192.168.10.100"
+host = "192.168.1.100"                             # MQTT broker IP
 port = 1883
 client_id = "indra_client"
 username = "your-username"
 password = "your-password"
 
-topic = "indra/monitor"				# Publish data
-interval = 10                			# seconds
+base_topic = "v2h"                                 # Derives v2h/status  v2h/command  v2h/availability
+                                                   # NOTE: update bridge.conf on the Pi if you change this
 
-sub = "indra/cmd_sub"				#Receive commands
-
-mqtt_smart_charge_topic = "indra_from_ha/smart_charge/request"          	#Will charge if supplier offers dynamic off-peak rates e.g Octopus Intelligent Tariffs. (if value = 1)
-mqtt_smart_charge_field = "smart_charge"
-
-mqtt_ev_drain_protection_topic = "indra_from_ha/ev_drain_protection/request"  	#Will prevent discharge when EV charger is drawing power. (if value = 1)
-mqtt_ev_drain_protection_field = "ev_drain_protection"
-
-mqtt_smart_export_topic = "indra_from_ha/smart_export/request"          	#Will discharge battery to grid when export price is favourable. (if value = 1)
+mqtt_smart_export_topic = "indra_from_ha/smart_export/request"
 mqtt_smart_export_field = "smart_export"
 
-mqtt_timeout_seconds = 120      						# 2 minutes - if no update, treat data as offline
+mqtt_smart_export_excess_solar_topic = "indra_from_ha/smart_export_excess_solar/request"
+mqtt_smart_export_excess_solar_field = "smart_export_excess_solar"
 
+mqtt_smart_charge_topic = "indra_from_ha/smart_charge/request"
+mqtt_smart_charge_field = "smart_charge"
 
+mqtt_ev_drain_protection_topic = "indra_from_ha/ev_drain_protection/request"
+mqtt_ev_drain_protection_field = "ev_drain_protection"
+
+mqtt_timeout_seconds = 120                         # Seconds before a stale signal topic clears its flag
 
 
 [meter]
-meter_type = "mqtt"								# modbus(default) or mqtt 
+meter_type = "mqtt"                                # "modbus" or "mqtt"
 address = "your-rtu-over-tcp-meter-address:port"
 
-mqtt_meter_host = "192.168.10.100"
+mqtt_meter_host = "192.168.1.100"
 mqtt_meter_port = 1883
 mqtt_meter_client_id = "indra_meter_client"
 mqtt_meter_username = "your-username"
 mqtt_meter_password = "your-password"
 
-mqtt_meter_total_power_topic = "glow/30C6F759930C/SENSOR/electricitymeter"	#e.g. { "power": 995, "powerl1": 186, "powerl2": 409, "powerl3": 400, "timestamp": 1776211377 }
-mqtt_meter_total_power_field = "electricitymeter.power.value"			#the field to extract from the JSON(unused if single value publisheda) blank
-mqtt_meter_total_power_scale = 1000.0 						#multiplication factor to watts - If meter provides kw then use 1000
+mqtt_meter_total_power_topic = "your/total-power/topic"
+mqtt_meter_total_power_field = "electricitymeter.power.value"  # dotted JSON path; blank if topic is a plain number
+mqtt_meter_total_power_scale = 1000.0                          # multiply to get Watts (use 1000 if meter publishes kW)
 
-mqtt_meter_phase_power_topic = "indra_from_ha/grid/status"			#Only required for 3 phase to limit export 
+mqtt_meter_phase_power_topic = "your/phase-power/topic"        # 3-phase export limiting only
 mqtt_meter_phase_power_field = "powerl3"
 mqtt_meter_phase_power_scale = 1
 
-mqtt_meter_timeout_seconds = 120      						# 2 minutes - if no update, treat meter as offline
+mqtt_meter_timeout_seconds = 120                               # Seconds before meter is treated as offline
 
+mqtt_meter_charger_volts_topic = "your/charger-volts/topic"    # Optional charger sub-meter (e.g. SDM230 via mbmd)
+mqtt_meter_charger_current_topic = "your/charger-current/topic"
+mqtt_meter_charger_power_topic = "your/charger-power/topic"
+mqtt_meter_charger_power_scale = 1.0                           # 1.0 for Watts; 1000.0 if mbmd publishes kW

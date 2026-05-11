@@ -28,6 +28,15 @@ rsync -vz --progress \
     target/arm-unknown-linux-musleabihf/release/$BINARY \
     $REMOTE_USER@$REMOTE_IP:$REMOTE_PATH/$BINARY
 
+echo "→ Transferring config..."
+if [ -f "$PROJECT_DIR/config.toml" ]; then
+    rsync -vz "$PROJECT_DIR/config.toml" $REMOTE_USER@$REMOTE_IP:$REMOTE_PATH/config.toml
+    echo "  config.toml transferred"
+else
+    echo "  ⚠️  No local config.toml found — BeagleBone keeps its existing config"
+    echo "     (copy config.example.toml to config.toml and fill in credentials)"
+fi
+
 echo "→ Setting permissions and restarting..."
 ssh $REMOTE_USER@$REMOTE_IP "
     sudo chown root:root $REMOTE_PATH/$BINARY &&
