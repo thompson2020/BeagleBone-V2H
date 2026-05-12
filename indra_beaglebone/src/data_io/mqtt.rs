@@ -304,7 +304,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
 
     let device = json!({
         "identifiers": ["BeagleBone-V2H"],
-        "name": "BeagleBone-V2H",
+        "name": "V2H",
         "manufacturer": "Indra"
     });
     let state = format!("{}/status", cfg.base_topic);
@@ -338,6 +338,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     for &(id, name, tpl, unit, dc) in sensors {
         let mut payload = json!({
             "unique_id": id,
+            "object_id": id,
             "name": name,
             "state_topic": state,
             "value_template": tpl,
@@ -370,6 +371,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     for &(id, name, tpl) in text_sensors {
         let payload = json!({
             "unique_id": id,
+            "object_id": id,
             "name": name,
             "state_topic": state,
             "value_template": tpl,
@@ -400,6 +402,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         let tpl = format!("{{{{value_json.supervisory.{} | lower}}}}", field);
         let payload = json!({
             "unique_id": id,
+            "object_id": id,
             "name": name,
             "state_topic": state,
             "value_template": tpl,
@@ -417,6 +420,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     let cmd_topic = format!("{}/command", cfg.base_topic);
     let mode_select = json!({
         "unique_id": "v2h_mode",
+        "object_id": "v2h_mode",
         "name": "Mode",
         "state_topic": state,
         "value_template": "{{ value_json.chademo.state }}",
