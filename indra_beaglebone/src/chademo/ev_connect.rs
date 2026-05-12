@@ -524,20 +524,28 @@ async fn v2h_requested_amps(
     } else if smart_export_active {
         let settings = crate::data_io::operator_settings::OPERATOR_SETTINGS.read().await;
         let soc_min = settings.smart_export_soc_min.max(crate::MIN_SOC);
+        let soc_max = settings.v2h_soc_max.min(crate::MAX_SOC);
         let max_amps = settings.v2h_max_amps.min(crate::MAX_AMPS);
         let export_limit_w = (settings.smart_export_limit_w as f32).max(0.0);
         drop(settings);
-        if *chademo.soc() <= soc_min {
+        let soc = *chademo.soc();
+        if soc <= soc_min {
             if last_amps < -0.5 {
-                log::info!("Smart export SoC floor hit ({}% <= {}%), pausing discharge", chademo.soc(), soc_min);
+                log::info!("Smart export SoC floor hit ({}% <= {}%), pausing discharge", soc, soc_min);
             }
             *dv = 0.0;
             *inner_tick = 9;
             0.0
         } else {
             let lower = -(max_amps as f32);
-            *dv = dv.clamp(lower, 0.0);
-            pid_step(dv, last_amps, last_meter, inner_tick, lower, 0.0, export_limit_w, "export").await
+            // Allow charging (positive amps) to absorb excess solar — only prevent charging
+            // once the car reaches its SoC ceiling.
+            let upper = if soc >= soc_max { 0.0 } else { max_amps as f32 };
+            if soc >= soc_max && last_amps > 0.5 {
+                log::info!("Smart export SoC ceiling hit ({}% >= {}%), holding discharge-only", soc, soc_max);
+            }
+            *dv = dv.clamp(lower, upper);
+            pid_step(dv, last_amps, last_meter, inner_tick, lower, upper, export_limit_w, "export").await
         }
     } else if smart_charge_active {
         *dv = 0.0;

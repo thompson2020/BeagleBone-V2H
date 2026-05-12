@@ -218,7 +218,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_charge_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_charge_request(enabled, false);
-            log::info!("MQTT: smart_charge_request → {}", enabled);
+            log::debug!("MQTT: smart_charge_request → {}", enabled);
         }
     }
 
@@ -234,7 +234,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_request(enabled, false);
-            log::info!("MQTT: smart_export_request → {}", enabled);
+            log::debug!("MQTT: smart_export_request → {}", enabled);
         }
     }
 
@@ -242,7 +242,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_excess_solar_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_excess_solar_request(enabled, false);
-            log::info!("MQTT: smart_export_excess_solar_request → {}", enabled);
+            log::debug!("MQTT: smart_export_excess_solar_request → {}", enabled);
         }
     }
 }
