@@ -13,15 +13,23 @@ whether the Zappi charger drew any current.
 cp config.example.toml config.toml
 # Edit config.toml and set your octopus.api_key
 
-# 2. Copy the HA database (while HA is running — copy avoids the lock)
-cp /mnt/ha_config/home-assistant_v2.db ha_db.db
-# Windows: copy \\192.168.10.21\config\home-assistant_v2.db ha_db.db
+# 2. Fetch the HA database (mounts CIFS share, safe online backup)
+./fetch_db.sh
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 3. Run the audit (re-run as many times as needed without re-fetching the DB)
+./audit.sh
+```
 
-# 4. Run
-python audit.py
+`fetch_db.sh` reuses the SMB credentials from `../v2h_homeassistant/.deploy_credentials`.
+Both scripts create the `.venv` automatically on the first run.
+
+### Manual steps (Windows or no SMB access)
+
+```bat
+copy \\192.168.10.21\config\home-assistant_v2.db ha_db.db
+python3 -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+.venv\Scripts\python audit.py
 ```
 
 Outputs land in `output/`:

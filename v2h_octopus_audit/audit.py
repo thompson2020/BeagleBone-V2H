@@ -54,8 +54,15 @@ with open(_CONFIG_PATH, "rb") as _f:
     _cfg = tomllib.load(_f)
 
 OCTOPUS_API_KEY    = _cfg["octopus"]["api_key"]
+_oct               = _cfg["octopus"]
+CACHED_ACCOUNT     = _oct.get("account_number")
+CACHED_MPAN        = _oct.get("mpan")
+CACHED_SERIAL      = _oct.get("serial")
+CACHED_TARIFF      = _oct.get("tariff_code")
+
 HA_DB_PATH         = _cfg["ha"]["db_path"]
 AUDIT_DAYS         = _cfg["ha"]["audit_days"]
+FROM_DATE          = _cfg["ha"].get("from_date")   # optional "YYYY-MM-DD" override
 OFFPEAK_ENTITY     = _cfg["ha"]["offpeak_entity"]
 ZAPPI_ENTITY       = _cfg["ha"]["zappi_entity"]
 SMARTCHARGE_ENTITY = _cfg["ha"]["smartcharge_entity"]
@@ -100,14 +107,25 @@ def gql_token() -> str | None:
         return None
 
 
-def get_account_info(session: requests.Session) -> dict:
+def get_account_info(session: requests.Session, jwt: str | None) -> dict:
     """Return account_number, mpan, serial, tariff_code, product_code."""
-    # Account number via GraphQL viewer query
-    r = session.post(GQL_URL, json={"query": "{ viewer { accounts { number } } }"})
-    r.raise_for_status()
-    accounts = r.json().get("data", {}).get("viewer", {}).get("accounts", [])
+    # Account number via GraphQL viewer query (requires JWT auth)
+    accounts = []
+    if jwt:
+        try:
+            r = requests.post(GQL_URL,
+                              json={"query": "{ viewer { accounts { number } } }"},
+                              headers={"Authorization": f"JWT {jwt}"})
+            r.raise_for_status()
+            resp = r.json()
+            if resp.get("errors"):
+                print(f"    ⚠  GraphQL viewer errors: {resp['errors']}")
+            accounts = ((resp.get("data") or {}).get("viewer") or {}).get("accounts") or []
+        except Exception as exc:
+            print(f"    ⚠  GraphQL viewer query failed: {exc}")
+
     if not accounts:
-        sys.exit("✗  No accounts found for this API key.")
+        sys.exit("✗  No accounts found. Check your API key in config.toml.")
     account_number = accounts[0]["number"]
     print(f"    Account : {account_number}")
 
@@ -248,25 +266,14 @@ def dispatches_to_slots(dispatches: list, from_dt: datetime, to_dt: datetime,
     return result
 
 
-def build_cheap_slots(from_dt: datetime, to_dt: datetime,
-                      unit_rates: list,
-                      completed: list, planned: list) -> dict[datetime, str]:
+def build_rate_slots(from_dt: datetime, to_dt: datetime,
+                     unit_rates: list) -> dict[datetime, str]:
     """
-    Return {slot_utc: source_label} for every cheap half-hour.
-
-    Priority:
-      1. Intelligent dispatches (GraphQL / REST) — most accurate for Intelligent Go
-      2. Unit rates where the value is the minimum (for Go/Agile fallback)
-      3. Hardcoded 23:30–05:30 guaranteed window if nothing else found
+    Return {slot_utc: "rate_X.XXp"} for every half-hour whose unit rate is
+    within 15 % of the tariff minimum (the off-peak band).
+    Falls back to the guaranteed 23:30–05:30 window if no rate data is available.
     """
-    cheap: dict[datetime, str] = {}
-
-    # ── 1. Dispatches ─────────────────────────────────────────────────────────
-    cheap.update(dispatches_to_slots(completed, from_dt, to_dt, "completed"))
-    cheap.update(dispatches_to_slots(planned,   from_dt, to_dt, "planned"))
-
-    # ── 2. Unit rates (half-hourly, e.g. Agile or multi-rate Go) ──────────────
-    if not cheap and unit_rates:
+    if unit_rates:
         rates_map: dict[datetime, float] = {}
         for rec in unit_rates:
             vf = _parse_dt(rec["valid_from"])
@@ -279,34 +286,45 @@ def build_cheap_slots(from_dt: datetime, to_dt: datetime,
         if rates_map:
             min_rate  = min(rates_map.values())
             threshold = min_rate * 1.15   # within 15 % of minimum → cheap
-            for slot, rate in rates_map.items():
-                if from_dt <= slot < to_dt and rate <= threshold:
-                    cheap[slot] = f"rate_{rate:.2f}p"
+            result = {slot: f"rate_{rate:.2f}p"
+                      for slot, rate in rates_map.items()
+                      if from_dt <= slot < to_dt and rate <= threshold}
+            print(f"    Rate-based cheap slots : {len(result)}")
+            return result
 
-    # ── 3. Guaranteed 23:30–05:30 fallback ────────────────────────────────────
-    if not cheap:
-        print("    ⚠  No dispatch/rate data — using guaranteed 23:30–05:30 window only")
-        cur = from_dt
-        while cur < to_dt:
-            loc  = cur.astimezone(TZ_UK)
-            h, m = loc.hour, loc.minute
-            in_window = (
-                (h == CHEAP_WINDOW_START[0] and m == CHEAP_WINDOW_START[1]) or
-                (h < CHEAP_WINDOW_END[0]) or
-                (h == CHEAP_WINDOW_END[0] and m < CHEAP_WINDOW_END[1])
-            )
-            if in_window:
-                cheap[cur] = "guaranteed"
-            cur += timedelta(minutes=30)
+    # Fallback — no rate data
+    print("    ⚠  No unit rate data — using guaranteed 23:30–05:30 window only")
+    result = {}
+    cur = from_dt
+    while cur < to_dt:
+        loc  = cur.astimezone(TZ_UK)
+        h, m = loc.hour, loc.minute
+        in_window = (
+            (h == CHEAP_WINDOW_START[0] and m >= CHEAP_WINDOW_START[1]) or
+            (h < CHEAP_WINDOW_END[0]) or
+            (h == CHEAP_WINDOW_END[0] and m <= CHEAP_WINDOW_END[1])
+        )
+        if in_window:
+            result[cur] = "guaranteed"
+        cur += timedelta(minutes=30)
+    return result
 
-    return cheap
+
+def build_dispatch_slots(from_dt: datetime, to_dt: datetime,
+                         completed: list, planned: list) -> dict[datetime, str]:
+    """Return {slot_utc: source_label} for every half-hour covered by a dispatch."""
+    result: dict[datetime, str] = {}
+    result.update(dispatches_to_slots(completed, from_dt, to_dt, "completed"))
+    result.update(dispatches_to_slots(planned,   from_dt, to_dt, "planned"))
+    print(f"    Dispatch slots         : {len(result)}")
+    return result
 
 
 # ── HA SQLite helpers ─────────────────────────────────────────────────────────
 
-def _schema_new(conn: sqlite3.Connection) -> bool:
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(states)").fetchall()}
-    return "last_changed_ts" in cols
+def _has_states_meta(conn: sqlite3.Connection) -> bool:
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    return "states_meta" in tables
 
 
 def fetch_ha_states(conn: sqlite3.Connection,
@@ -315,20 +333,32 @@ def fetch_ha_states(conn: sqlite3.Connection,
     """
     Return [(utc_datetime, state_str)] for an entity, ordered by time.
     Skips unavailable / unknown states.
-    Handles both the old HA schema (datetime columns) and new (float timestamp columns).
+
+    Modern HA schema (2023+): entity_id lives in states_meta; states is indexed
+    on (metadata_id, last_updated_ts). We look up metadata_id first so the main
+    query hits the index instead of scanning the full table.
     """
     skip = {"unavailable", "unknown", "None", ""}
-    if _schema_new(conn):
+
+    if _has_states_meta(conn):
+        meta = conn.execute(
+            "SELECT metadata_id FROM states_meta WHERE entity_id = ?", (entity_id,)
+        ).fetchone()
+        if not meta:
+            return []
+        metadata_id = meta[0]
         rows = conn.execute("""
-            SELECT last_changed_ts, state FROM states
-            WHERE entity_id = ?
-              AND last_changed_ts BETWEEN ? AND ?
+            SELECT COALESCE(last_changed_ts, last_updated_ts), state
+            FROM states
+            WHERE metadata_id = ?
+              AND last_updated_ts BETWEEN ? AND ?
               AND state NOT IN ('unavailable','unknown','None','')
-            ORDER BY last_changed_ts
-        """, (entity_id, from_ts, to_ts)).fetchall()
+            ORDER BY last_updated_ts
+        """, (metadata_id, from_ts, to_ts)).fetchall()
         return [(datetime.fromtimestamp(r[0], tz=TZ_UTC), r[1])
                 for r in rows if r[1] not in skip]
     else:
+        # Old schema — entity_id column populated, datetime strings
         rows = conn.execute("""
             SELECT last_changed, state FROM states
             WHERE entity_id = ?
@@ -454,7 +484,10 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
     stamp  = datetime.now().strftime("%Y%m%d_%H%M")
     to_dt  = datetime.now(TZ_UTC).replace(minute=0, second=0, microsecond=0)
-    from_dt = to_dt - timedelta(days=AUDIT_DAYS)
+    if FROM_DATE:
+        from_dt = datetime.strptime(FROM_DATE, "%Y-%m-%d").replace(tzinfo=TZ_UK).astimezone(TZ_UTC)
+    else:
+        from_dt = to_dt - timedelta(days=AUDIT_DAYS)
 
     print()
     print("=" * 62)
@@ -466,7 +499,22 @@ def main() -> None:
     # ── 1. Octopus account + tariff info ──────────────────────────────────────
     print("\n[1/4] Octopus account …")
     session = rest_session()
-    info    = get_account_info(session)
+    jwt     = gql_token()          # needed for dispatch queries
+
+    if all([CACHED_ACCOUNT, CACHED_MPAN, CACHED_SERIAL, CACHED_TARIFF]):
+        parts = CACHED_TARIFF.split("-")
+        info  = dict(
+            account_number = CACHED_ACCOUNT,
+            mpan           = CACHED_MPAN,
+            serial         = CACHED_SERIAL,
+            tariff_code    = CACHED_TARIFF,
+            product_code   = "-".join(parts[2:-1]) if len(parts) >= 4 else "",
+        )
+        print(f"    Account : {CACHED_ACCOUNT} (config)")
+        print(f"    MPAN    : {CACHED_MPAN}")
+        print(f"    Tariff  : {CACHED_TARIFF}")
+    else:
+        info = get_account_info(session, jwt)
 
     # ── 2. Unit rates (for reference / Agile support) ─────────────────────────
     print("\n[2/4] Rates + dispatches …")
@@ -475,7 +523,6 @@ def main() -> None:
         unit_rates = get_unit_rates(session, info["product_code"],
                                     info["tariff_code"], from_dt, to_dt)
 
-    jwt = gql_token()
     gql_done, gql_planned = get_dispatches_gql(info["account_number"], jwt)
 
     if gql_done or gql_planned:
@@ -484,8 +531,10 @@ def main() -> None:
         print("    Falling back to REST dispatches …")
         completed, planned = get_dispatches_rest(session, info["account_number"])
 
-    cheap_map = build_cheap_slots(from_dt, to_dt, unit_rates, completed, planned)
-    print(f"    Cheap half-hour slots identified: {len(cheap_map)}")
+    rate_map     = build_rate_slots(from_dt, to_dt, unit_rates)
+    dispatch_map = build_dispatch_slots(from_dt, to_dt, completed, planned)
+    cheap_map    = rate_map | dispatch_map   # union — dispatch extends rate window
+    print(f"    Total cheap slots (rate + dispatch): {len(cheap_map)}")
 
     # ── 3. HA database ────────────────────────────────────────────────────────
     print("\n[3/4] HA sensor history …")
@@ -498,6 +547,14 @@ def main() -> None:
         )
 
     conn = sqlite3.connect(HA_DB_PATH)
+    try:
+        conn.execute("PRAGMA integrity_check(1)").fetchone()
+    except sqlite3.DatabaseError as e:
+        sys.exit(
+            f"\n✗  HA database is corrupt: {e}\n"
+            "   Re-run run_audit.sh to take a fresh backup using the safe online backup.\n"
+            "   (Plain 'cp' of a live SQLite database can produce a corrupt copy.)"
+        )
     from_ts, to_ts = from_dt.timestamp(), to_dt.timestamp()
 
     print(f"    {OFFPEAK_ENTITY}")
@@ -527,8 +584,10 @@ def main() -> None:
         local  = slot_s.astimezone(TZ_UK)
         cur   += timedelta(minutes=30)
 
-        oct_cheap  = slot_s in cheap_map
-        oct_source = cheap_map.get(slot_s, "")
+        oct_cheap    = slot_s in cheap_map
+        rate_cheap   = slot_s in rate_map
+        dispatched   = slot_s in dispatch_map
+        oct_source   = dispatch_map.get(slot_s) or rate_map.get(slot_s, "")
 
         op_frac    = on_fraction(offpeak_states, slot_s, slot_e)
         ha_op_on   = op_frac >= ON_FRACTION_MIN
@@ -546,6 +605,8 @@ def main() -> None:
             "day":             local.strftime("%a"),
             "slot_local":      local.strftime("%H:%M"),
             "slot_utc":        slot_s.strftime("%Y-%m-%dT%H:%MZ"),
+            "rate_cheap":      "Y" if rate_cheap  else "",
+            "dispatched":      "Y" if dispatched  else "",
             "oct_cheap":       "Y" if oct_cheap   else "",
             "oct_source":      oct_source,
             "ha_offpeak_%":    f"{op_frac*100:.0f}",
@@ -585,6 +646,8 @@ def main() -> None:
         totals: dict[str, str] = {k: "" for k in fieldnames}
         totals.update({
             "date":           "TOTALS",
+            "rate_cheap":     str(sum(1 for r in detail_rows if r["rate_cheap"])),
+            "dispatched":     str(sum(1 for r in detail_rows if r["dispatched"])),
             "oct_cheap":      str(sum(1 for r in detail_rows if r["oct_cheap"])),
             "ha_offpeak":     str(sum(1 for r in detail_rows if r["ha_offpeak"])),
             "zappi_charging": str(sum(1 for r in detail_rows if r["zappi_charging"])),
@@ -631,6 +694,8 @@ def main() -> None:
 
     # ── Console summary ───────────────────────────────────────────────────────
     total_slots    = len(detail_rows)
+    total_rate     = sum(1 for r in detail_rows if r["rate_cheap"])
+    total_dispatch = sum(1 for r in detail_rows if r["dispatched"])
     total_cheap    = sum(1 for r in detail_rows if r["oct_cheap"])
     total_ha       = sum(1 for r in detail_rows if r["ha_offpeak"])
     total_zappi    = sum(1 for r in detail_rows if r["zappi_charging"])
@@ -641,7 +706,9 @@ def main() -> None:
     print()
     print("=" * 62)
     print(f"  Total half-hour slots examined  : {total_slots:,}")
-    print(f"  Cheap slots (Octopus API)       : {total_cheap:,}")
+    print(f"  Cheap by tariff rate            : {total_rate:,}")
+    print(f"  Cheap by dispatch               : {total_dispatch:,}")
+    print(f"  Total cheap (rate + dispatch)   : {total_cheap:,}")
     print(f"  HA off_peak sensor detected     : {total_ha:,}")
     print(f"  Zappi charging slots            : {total_zappi:,}")
     print(f"  ──────────────────────────────────────────────────")

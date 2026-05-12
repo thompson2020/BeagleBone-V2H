@@ -2,7 +2,11 @@
 # Copy this file to config.toml and fill in your values.
 
 [octopus]
-api_key = "sk_live_YOUR_KEY_HERE"
+api_key        = "sk_live_YOUR_KEY_HERE"
+account_number = "A-XXXXXXXX"       # optional — skips API discovery if set
+mpan           = "1100000000000"    # optional
+serial         = "XXXXXXXXXX"       # optional
+tariff_code    = "E-1R-XXXX-X"     # optional
 
 [ha]
 db_path    = "ha_db.db"

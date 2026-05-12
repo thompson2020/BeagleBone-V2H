@@ -1,6 +1,11 @@
 output/
+api_explore/
 ha_db.db
 *.db
+*.db-shm
+*.db-wal
 __pycache__/
 *.pyc
 .env
+config.toml
+.venv/
