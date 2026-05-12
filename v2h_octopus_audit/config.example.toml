@@ -1,0 +1,24 @@
+# v2h_octopus_audit — configuration template
+# Copy this file to config.toml and fill in your values.
+
+[octopus]
+api_key = "sk_live_YOUR_KEY_HERE"
+
+[ha]
+db_path    = "ha_db.db"
+audit_days = 30
+
+# HA entity IDs — find yours in HA Developer Tools → States
+offpeak_entity     = "binary_sensor.octopus_energy_electricity_XXXX_XXXX_off_peak"
+zappi_entity       = "sensor.myenergi_zappi_XXXXXXXX_internal_load_ct1"
+smartcharge_entity = "sensor.smartcharge_status"
+
+[thresholds]
+zappi_on_w      = 1000   # watts above which Zappi is considered to be charging
+on_fraction_min = 0.50   # fraction of a 30-min slot a binary sensor must be ON
+
+[cheap_window]
+start_hour   = 23
+start_minute = 30
+end_hour     = 5
+end_minute   = 30

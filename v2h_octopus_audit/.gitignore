@@ -1,0 +1,6 @@
+output/
+ha_db.db
+*.db
+__pycache__/
+*.pyc
+.env
