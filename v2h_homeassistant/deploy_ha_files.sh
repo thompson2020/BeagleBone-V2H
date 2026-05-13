@@ -1,10 +1,12 @@
 #!/bin/bash
-# Deploy BeagleBone-related HA sensor and template YAML files to Home Assistant.
+# Deploy BeagleBone-related HA YAML files to Home Assistant.
 # Requires cifs-utils: sudo apt install cifs-utils
 #
-# Automations and dashboards must be applied manually in the HA UI:
-#   Automations: Settings → Automations → import YAML from automations/
-#   Dashboards:  Dashboard → Edit → Raw config editor → paste from dashboards/
+# Dashboards must be applied manually in the HA UI:
+#   Dashboard → Edit → Raw config editor → paste from dashboards/
+#
+# After deploy: Developer Tools → YAML → Check Config, then restart HA
+# to pick up any changes to config/package_v2h_settings.yaml.
 
 set -euo pipefail
 
@@ -36,15 +38,22 @@ sudo mount -t cifs "$SHARE" "$MOUNT_POINT" \
 
 mkdir -p "$MOUNT_POINT/sensors"
 mkdir -p "$MOUNT_POINT/templates"
+mkdir -p "$MOUNT_POINT/packages"
 
 echo "Copying sensors/..."
 cp "$SCRIPT_DIR/sensors/"*.yaml "$MOUNT_POINT/sensors/"
-echo "  $(ls "$SCRIPT_DIR/sensors/"*.yaml | wc -l) file(s) copied"
+for f in "$SCRIPT_DIR/sensors/"*.yaml; do echo "  sensors/$(basename "$f")"; done
 
 echo "Copying templates/..."
 cp "$SCRIPT_DIR/templates/"*.yaml "$MOUNT_POINT/templates/"
-echo "  $(ls "$SCRIPT_DIR/templates/"*.yaml | wc -l) file(s) copied"
+for f in "$SCRIPT_DIR/templates/"*.yaml; do echo "  templates/$(basename "$f")"; done
+
+echo "Copying packages/..."
+cp "$SCRIPT_DIR/packages/"*.yaml "$MOUNT_POINT/packages/"
+for f in "$SCRIPT_DIR/packages/"*.yaml; do echo "  packages/$(basename "$f")"; done
 
 echo ""
-echo "Done. In HA: Developer Tools → YAML → Reload Template Entities"
-echo "For REST sensor changes a full HA restart is required."
+echo "Done. To reload in HA:"
+echo "  sensors/   → Developer Tools → YAML → Reload Template Entities"
+echo "  templates/ → Developer Tools → YAML → Reload Template Entities"
+echo "  packages/  → Developer Tools → YAML → Check Config, then restart HA"

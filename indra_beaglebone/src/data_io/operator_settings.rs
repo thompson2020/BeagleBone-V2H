@@ -144,7 +144,7 @@ async fn save(settings: &OperatorSettings) -> Result<(), IndraError> {
 }
 
 /// Single entry point for all settings changes.
-/// Call from both the WebSocket handler and (future) MQTT handler.
+/// Call from both the WebSocket handler and MQTT handler.
 pub async fn update(mut new_settings: OperatorSettings) {
     new_settings.validate_and_clamp();
     log::info!("{TAG} update received | {}", to_json(&new_settings));
@@ -152,5 +152,61 @@ pub async fn update(mut new_settings: OperatorSettings) {
     if let Err(e) = save(&new_settings).await {
         log::error!("{TAG} failed to persist: {:?}", e);
     }
+}
 
+/// Partial-update counterpart to `update()`. Only fields wrapped in `Some` are applied;
+/// absent fields leave the current value untouched. Used by `Cmd::SetSetting`.
+pub async fn patch(p: SettingPatch) {
+    let mut s = OPERATOR_SETTINGS.read().await.clone();
+    if let Some(v) = p.v2h_soc_min               { s.v2h_soc_min = v; }
+    if let Some(v) = p.v2h_soc_max               { s.v2h_soc_max = v; }
+    if let Some(v) = p.v2h_soc_max_boost         { s.v2h_soc_max_boost = v; }
+    if let Some(v) = p.v2h_max_amps              { s.v2h_max_amps = v; }
+    if let Some(v) = p.self_use                  { s.self_use = v; }
+    if let Some(v) = p.export_excess_solar       { s.export_excess_solar = v; }
+    if let Some(v) = p.ev_drain_protection       { s.ev_drain_protection = v; }
+    if let Some(v) = p.ready_to_drive            { s.ready_to_drive = v; }
+    if let Some(v) = p.ready_to_drive_end_time   { s.ready_to_drive_end_time = v; }
+    if let Some(v) = p.ready_to_drive_start_time { s.ready_to_drive_start_time = v; }
+    if let Some(v) = p.ready_to_drive_soc        { s.ready_to_drive_soc = v; }
+    if let Some(v) = p.ready_to_drive_days       { s.ready_to_drive_days = v; }
+    if let Some(v) = p.off_peak_charging         { s.off_peak_charging = v; }
+    if let Some(v) = p.off_peak_start            { s.off_peak_start = v; }
+    if let Some(v) = p.off_peak_end              { s.off_peak_end = v; }
+    if let Some(v) = p.smart_charge              { s.smart_charge = v; }
+    if let Some(v) = p.smart_export              { s.smart_export = v; }
+    if let Some(v) = p.smart_export_limit_w      { s.smart_export_limit_w = v; }
+    if let Some(v) = p.smart_export_soc_min      { s.smart_export_soc_min = v; }
+    if let Some(v) = p.smart_export_excess_solar { s.smart_export_excess_solar = v; }
+    if let Some(v) = p.charge_soc_limit          { s.charge_soc_limit = v; }
+    if let Some(v) = p.charge_amps               { s.charge_amps = v; }
+    if let Some(v) = p.charge_eco                { s.charge_eco = v; }
+    update(s).await;
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct SettingPatch {
+    pub v2h_soc_min:               Option<u8>,
+    pub v2h_soc_max:               Option<u8>,
+    pub v2h_soc_max_boost:         Option<u8>,
+    pub v2h_max_amps:              Option<u8>,
+    pub self_use:                  Option<bool>,
+    pub export_excess_solar:       Option<bool>,
+    pub ev_drain_protection:       Option<bool>,
+    pub ready_to_drive:            Option<bool>,
+    pub ready_to_drive_end_time:   Option<String>,
+    pub ready_to_drive_start_time: Option<String>,
+    pub ready_to_drive_soc:        Option<u8>,
+    pub ready_to_drive_days:       Option<[bool; 7]>,
+    pub off_peak_charging:         Option<bool>,
+    pub off_peak_start:            Option<String>,
+    pub off_peak_end:              Option<String>,
+    pub smart_charge:              Option<bool>,
+    pub smart_export:              Option<bool>,
+    pub smart_export_limit_w:      Option<u32>,
+    pub smart_export_soc_min:      Option<u8>,
+    pub smart_export_excess_solar: Option<bool>,
+    pub charge_soc_limit:          Option<u8>,
+    pub charge_amps:               Option<u8>,
+    pub charge_eco:                Option<bool>,
 }

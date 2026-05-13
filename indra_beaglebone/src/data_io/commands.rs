@@ -1,7 +1,7 @@
 use crate::{
     data_io::{
         db::Parameters,
-        operator_settings::{update as update_settings, OperatorSettings},
+        operator_settings::{patch as patch_setting, update as update_settings, OperatorSettings, SettingPatch},
     },
     global_state::OperationMode,
     scheduler::Events,
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 pub enum Cmd {
     SetMode(OperationMode),
     SetSettings(OperatorSettings),
+    SetSetting(SettingPatch),
     SetEvents(Events),
     #[default]
     GetMode,
@@ -44,6 +45,11 @@ pub async fn dispatch(cmd: Cmd, mode_tx: &ChademoTx) -> bool {
         Cmd::SetSettings(settings) => {
             log::info!("Command: SetSettings");
             update_settings(settings).await;
+            true
+        }
+        Cmd::SetSetting(patch) => {
+            log::info!("Command: SetSetting");
+            patch_setting(patch).await;
             true
         }
         _ => false,

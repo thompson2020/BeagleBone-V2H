@@ -310,29 +310,29 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     let state = format!("{}/status", cfg.base_topic);
     let avail = format!("{}/availability", cfg.base_topic);
 
-    // Numeric sensors: (object_id, name, value_template, unit, device_class or "")
+    // Numeric sensors: (id, name, value_template, unit, device_class or "")
     let sensors: &[(&str, &str, &str, &str, &str)] = &[
-        ("v2h_soc",                    "SoC",
+        ("beaglebone_v2h_soc",                    "SoC",
          "{{ value_json.chademo.soc }}", "%", "battery"),
-        ("v2h_dc_power_w",             "DC Power",
+        ("beaglebone_v2h_dc_power_w",             "DC Power",
          "{{ ((value_json.pre.dc_output_volts | float(0)) * (value_json.pre.dc_output_amps | float(0))) | round(0) | int }}", "W", "power"),
-        ("v2h_charger_ac_power_w",     "AC Power",
+        ("beaglebone_v2h_charger_ac_power_w",     "AC Power",
          "{{ value_json.meter.charger_w | default(0) | round(0) | int }}", "W", "power"),
-        ("v2h_grid_power_w",           "Grid Power",
+        ("beaglebone_v2h_grid_power_w",           "Grid Power",
          "{{ value_json.meter.total_w | default(0) | round(0) | int }}", "W", "power"),
-        ("v2h_grid_phase_power_w",     "Grid Phase Power",
+        ("beaglebone_v2h_grid_phase_power_w",     "Grid Phase Power",
          "{{ value_json.meter.phase_w | default(0) | round(0) | int }}", "W", "power"),
-        ("v2h_efficiency_pct",         "Efficiency",
+        ("beaglebone_v2h_efficiency_pct",         "Efficiency",
          "{{ value_json.meter.efficiency | default(0) | round(1) }}", "%", ""),
-        ("v2h_pre_temp_c",             "PRE Temperature",
+        ("beaglebone_v2h_pre_temp_c",             "PRE Temperature",
          "{{ value_json.pre.temp | round(1) }}", "°C", "temperature"),
-        ("v2h_pre_fan_duty_pct",       "PRE Fan Duty",
+        ("beaglebone_v2h_pre_fan_duty_pct",       "PRE Fan Duty",
          "{{ value_json.pre.fan_duty }}", "%", ""),
-        ("v2h_charging_current_req_a", "Charging Current Request",
+        ("beaglebone_v2h_charging_current_req_a", "Charging Current Request",
          "{{ value_json.chademo.x102.charging_current_request }}", "A", "current"),
-        ("v2h_dc_output_volts",        "DC Output Volts",
+        ("beaglebone_v2h_dc_output_volts",        "DC Output Volts",
          "{{ value_json.pre.dc_output_volts | round(1) }}", "V", "voltage"),
-        ("v2h_dc_output_amps",         "DC Output Amps",
+        ("beaglebone_v2h_dc_output_amps",         "DC Output Amps",
          "{{ value_json.pre.dc_output_amps | round(1) }}", "A", "current"),
     ];
     for &(id, name, tpl, unit, dc) in sensors {
@@ -357,9 +357,9 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
 
     // Text sensors (no unit/device_class/state_class)
     let text_sensors: &[(&str, &str, &str)] = &[
-        ("v2h_operation_mode", "Operation Mode", "{{ value_json.chademo.state }}"),
-        ("v2h_pre_state",      "PRE State",      "{{ value_json.pre.state }}"),
-        ("v2h_active_mode",    "Active Mode",
+        ("beaglebone_v2h_operation_mode", "Operation Mode", "{{ value_json.chademo.state }}"),
+        ("beaglebone_v2h_pre_state",      "PRE State",      "{{ value_json.pre.state }}"),
+        ("beaglebone_v2h_active_mode",    "Active Mode",
          "{% if value_json.supervisory.ready_to_drive_active %}Ready to Drive\
 {% elif value_json.supervisory.off_peak_charging_active %}Off-Peak\
 {% elif value_json.supervisory.smart_export_active %}Smart Export\
@@ -383,23 +383,50 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         publish_one_discovery(client, format!("homeassistant/sensor/{}/config", id), payload).await;
     }
 
-    // Binary sensors: (object_id, name, supervisory field)
+    // Binary sensors: (id, name, supervisory field)
     let binary_sensors: &[(&str, &str, &str)] = &[
-        ("v2h_smart_charge_request",        "Smart Charge Request",          "smart_charge_request"),
-        ("v2h_smart_charge_active",         "Smart Charge Active",           "smart_charge_active"),
-        ("v2h_ev_drain_protection_request", "EV Drain Protection Request",   "ev_drain_protection_request"),
-        ("v2h_ev_drain_protection_active",  "EV Drain Protection Active",    "ev_drain_protection_active"),
-        ("v2h_smart_export_request",        "Smart Export Request",          "smart_export_request"),
-        ("v2h_smart_export_active",         "Smart Export Active",           "smart_export_active"),
-        ("v2h_smart_export_solar_request",  "Smart Export Solar Request",    "smart_export_excess_solar_request"),
-        ("v2h_smart_export_solar_active",   "Smart Export Solar Active",     "smart_export_excess_solar_active"),
-        ("v2h_ready_to_drive_request",      "Ready to Drive Request",        "ready_to_drive_request"),
-        ("v2h_ready_to_drive_active",       "Ready to Drive Active",         "ready_to_drive_active"),
-        ("v2h_off_peak_charging_request",   "Off-Peak Charging Request",     "off_peak_charging_request"),
-        ("v2h_off_peak_charging_active",    "Off-Peak Charging Active",      "off_peak_charging_active"),
+        ("beaglebone_v2h_smart_charge_request",        "Smart Charge Request",          "smart_charge_request"),
+        ("beaglebone_v2h_smart_charge_active",         "Smart Charge Active",           "smart_charge_active"),
+        ("beaglebone_v2h_ev_drain_protection_request", "EV Drain Protection Request",   "ev_drain_protection_request"),
+        ("beaglebone_v2h_ev_drain_protection_active",  "EV Drain Protection Active",    "ev_drain_protection_active"),
+        ("beaglebone_v2h_smart_export_request",        "Smart Export Request",          "smart_export_request"),
+        ("beaglebone_v2h_smart_export_active",         "Smart Export Active",           "smart_export_active"),
+        ("beaglebone_v2h_smart_export_solar_request",  "Smart Export Solar Request",    "smart_export_excess_solar_request"),
+        ("beaglebone_v2h_smart_export_solar_active",   "Smart Export Solar Active",     "smart_export_excess_solar_active"),
+        ("beaglebone_v2h_ready_to_drive_request",      "Ready to Drive Request",        "ready_to_drive_request"),
+        ("beaglebone_v2h_ready_to_drive_active",       "Ready to Drive Active",         "ready_to_drive_active"),
+        ("beaglebone_v2h_off_peak_charging_request",   "Off-Peak Charging Request",     "off_peak_charging_request"),
+        ("beaglebone_v2h_off_peak_charging_active",    "Off-Peak Charging Active",      "off_peak_charging_active"),
     ];
     for &(id, name, field) in binary_sensors {
         let tpl = format!("{{{{value_json.supervisory.{} | lower}}}}", field);
+        let payload = json!({
+            "unique_id": id,
+            "object_id": id,
+            "name": name,
+            "state_topic": state,
+            "value_template": tpl,
+            "payload_on": "true",
+            "payload_off": "false",
+            "availability_topic": avail,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device.clone(),
+        });
+        publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", id), payload).await;
+    }
+ 
+    // Operator settings binary sensors: (object_id, name, settings field)
+    let settings_sensors: &[(&str, &str, &str)] = &[
+        ("beaglebone_v2h_ready_to_drive_enabled",      "Ready to Drive Enabled",      "ready_to_drive"),
+        ("beaglebone_v2h_off_peak_charging_enabled",   "Off-Peak Charging Enabled",   "off_peak_charging"),
+        ("beaglebone_v2h_smart_export_enabled",        "Smart Export Enabled",        "smart_export"),
+        ("beaglebone_v2h_smart_export_solar_enabled",  "Smart Export Solar Enabled",  "smart_export_excess_solar"),
+        ("beaglebone_v2h_smart_charge_enabled",        "Smart Charge Enabled",        "smart_charge"),
+        ("beaglebone_v2h_ev_drain_protection_enabled", "EV Drain Protection Enabled", "ev_drain_protection"),
+    ];
+    for &(id, name, field) in settings_sensors {
+        let tpl = format!("{{{{value_json.settings.{} | lower}}}}", field);
         let payload = json!({
             "unique_id": id,
             "object_id": id,
@@ -419,8 +446,8 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     // Mode select — allows HA to change mode via v2h/command
     let cmd_topic = format!("{}/command", cfg.base_topic);
     let mode_select = json!({
-        "unique_id": "v2h_mode",
-        "object_id": "v2h_mode",
+        "unique_id": "beaglebone_v2h_mode",
+        "object_id": "beaglebone_v2h_mode",
         "name": "Mode",
         "state_topic": state,
         "value_template": "{{ value_json.chademo.state }}",

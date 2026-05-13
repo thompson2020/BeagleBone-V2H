@@ -1,0 +1,97 @@
+type: horizontal-stack
+cards:
+  - type: custom:button-card
+    name: EV Drain
+    icon: mdi:shield-battery-outline
+    tap_action:
+      action: none
+    styles:
+      card:
+        - background-color: var(--card-background-color)
+        - border: 1px solid var(--divider-color)
+      icon:
+        - color: var(--secondary-text-color)
+      name:
+        - color: var(--secondary-text-color)
+
+  - type: custom:button-card
+    entity: binary_sensor.v2h_ev_drain_protection_enabled_2
+    name: Enabled
+    icon: mdi:shield-check-outline
+    tap_action:
+      action: call-service
+      service: mqtt.publish
+      service_data:
+        topic: v2h/command
+        payload: >
+          [[[
+            return entity.state === 'on'
+              ? '{"cmd":{"SetSetting":{"ev_drain_protection":false}}}'
+              : '{"cmd":{"SetSetting":{"ev_drain_protection":true}}}';
+          ]]]
+    styles:
+      card:
+        - background-color: >
+            [[[ return entity.state === 'on'
+                ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+        - border: >
+            [[[ return entity.state === 'on'
+                ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+      icon:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+      name:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+
+  - type: custom:button-card
+    entity: binary_sensor.v2h_ev_drain_protection_request
+    name: Request
+    icon: mdi:circle-outline
+    tap_action:
+      action: none
+    styles:
+      card:
+        - background-color: >
+            [[[ return entity.state === 'on'
+                ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+        - border: >
+            [[[ return entity.state === 'on'
+                ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+      icon:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+      name:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+
+  - type: custom:button-card
+    entity: binary_sensor.v2h_ev_drain_protection_active
+    name: Active
+    icon: mdi:circle
+    tap_action:
+      action: none
+    styles:
+      card:
+        - background-color: >
+            [[[ return entity.state === 'on'
+                ? 'rgba(239,68,68,0.2)' : 'var(--card-background-color)' ]]]
+        - border: >
+            [[[ return entity.state === 'on'
+                ? '2px solid #ef4444' : '1px solid var(--divider-color)' ]]]
+      icon:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#ef4444' : 'var(--secondary-text-color)' ]]]
+      name:
+        - color: >
+            [[[ return entity.state === 'on'
+                ? '#ef4444' : 'var(--secondary-text-color)' ]]]
+
+grid_options:
+  columns: 12
+  rows: auto
