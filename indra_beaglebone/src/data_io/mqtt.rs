@@ -416,35 +416,141 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", id), payload).await;
     }
  
-    // Operator settings binary sensors: (object_id, name, settings field)
-    let settings_sensors: &[(&str, &str, &str)] = &[
-        ("beaglebone_v2h_ready_to_drive_enabled",      "Ready to Drive Enabled",      "ready_to_drive"),
-        ("beaglebone_v2h_off_peak_charging_enabled",   "Off-Peak Charging Enabled",   "off_peak_charging"),
-        ("beaglebone_v2h_smart_export_enabled",        "Smart Export Enabled",        "smart_export"),
-        ("beaglebone_v2h_smart_export_solar_enabled",  "Smart Export Solar Enabled",  "smart_export_excess_solar"),
-        ("beaglebone_v2h_smart_charge_enabled",        "Smart Charge Enabled",        "smart_charge"),
-        ("beaglebone_v2h_ev_drain_protection_enabled", "EV Drain Protection Enabled", "ev_drain_protection"),
+    let cmd_topic = format!("{}/command", cfg.base_topic);
+
+    // Operator settings switches: read + write boolean settings
+    // unique_id uses beaglebone_ prefix; object_id uses v2h_ so entity_id is switch.v2h_*
+    let settings_switches: &[(&str, &str, &str, &str)] = &[
+        // (unique_id, object_id, name, settings_field)
+        ("beaglebone_v2h_ready_to_drive_enabled",      "v2h_ready_to_drive_enabled",      "Ready to Drive",      "ready_to_drive"),
+        ("beaglebone_v2h_off_peak_charging_enabled",   "v2h_off_peak_charging_enabled",   "Off-Peak Charging",   "off_peak_charging"),
+        ("beaglebone_v2h_smart_export_enabled",        "v2h_smart_export_enabled",        "Smart Export",        "smart_export"),
+        ("beaglebone_v2h_smart_export_solar_enabled",  "v2h_smart_export_solar_enabled",  "Smart Export Solar",  "smart_export_excess_solar"),
+        ("beaglebone_v2h_smart_charge_enabled",        "v2h_smart_charge_enabled",        "Smart Charge",        "smart_charge"),
+        ("beaglebone_v2h_ev_drain_protection_enabled", "v2h_ev_drain_protection_enabled", "EV Drain Protection", "ev_drain_protection"),
+        ("beaglebone_v2h_self_use",                    "v2h_self_use",                    "Self Use",            "self_use"),
+        ("beaglebone_v2h_export_excess_solar",         "v2h_export_excess_solar",         "Export Excess Solar", "export_excess_solar"),
+        ("beaglebone_v2h_charge_eco",                  "v2h_charge_eco",                  "Charge Eco",          "charge_eco"),
     ];
-    for &(id, name, field) in settings_sensors {
-        let tpl = format!("{{{{value_json.settings.{} | lower}}}}", field);
+    for &(uid, oid, name, field) in settings_switches {
+        let tpl     = format!("{{{{value_json.settings.{} | lower}}}}", field);
+        let pay_on  = format!("{{\"cmd\":{{\"SetSetting\":{{\"{}\":true}}}}}}", field);
+        let pay_off = format!("{{\"cmd\":{{\"SetSetting\":{{\"{}\":false}}}}}}", field);
         let payload = json!({
-            "unique_id": id,
-            "object_id": id,
+            "unique_id": uid,
+            "object_id": oid,
             "name": name,
             "state_topic": state,
             "value_template": tpl,
-            "payload_on": "true",
-            "payload_off": "false",
+            "state_on": "true",
+            "state_off": "false",
+            "command_topic": cmd_topic,
+            "payload_on": pay_on,
+            "payload_off": pay_off,
+            "entity_category": "config",
             "availability_topic": avail,
             "payload_available": "online",
             "payload_not_available": "offline",
             "device": device.clone(),
         });
-        publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", id), payload).await;
+        publish_one_discovery(client, format!("homeassistant/switch/{}/config", uid), payload).await;
+    }
+
+    // Operator settings number entities: native HA slider + sends SetSetting on change
+    // unique_id uses beaglebone_ prefix; object_id uses v2h_ so entity_id is number.v2h_*
+    let settings_numbers: &[(&str, &str, &str, &str, i64, i64, i64, &str)] = &[
+        // (unique_id, object_id, name, settings_field, min, max, step, unit)
+        ("beaglebone_v2h_soc_min",              "v2h_soc_min",              "V2H SoC Min",          "v2h_soc_min",             10, 100,   1, "%"),
+        ("beaglebone_v2h_soc_max",              "v2h_soc_max",              "V2H SoC Max",          "v2h_soc_max",             10, 100,   1, "%"),
+        ("beaglebone_v2h_soc_max_boost",        "v2h_soc_max_boost",        "V2H SoC Max Boost",    "v2h_soc_max_boost",       10, 100,   1, "%"),
+        ("beaglebone_v2h_max_amps",             "v2h_max_amps",             "V2H Max Amps",         "v2h_max_amps",             1,  16,   1, "A"),
+        ("beaglebone_v2h_rtd_soc",              "v2h_rtd_soc",              "RTD SoC Target",       "ready_to_drive_soc",      10, 100,   1, "%"),
+        ("beaglebone_v2h_smart_export_limit_w", "v2h_smart_export_limit_w", "Smart Export Limit",   "smart_export_limit_w",     0, 10000, 100, "W"),
+        ("beaglebone_v2h_smart_export_soc_min", "v2h_smart_export_soc_min", "Smart Export SoC Min", "smart_export_soc_min",    10, 100,   1, "%"),
+        ("beaglebone_v2h_charge_soc_limit",     "v2h_charge_soc_limit",     "Charge SoC Limit",     "charge_soc_limit",        10, 100,   1, "%"),
+        ("beaglebone_v2h_charge_amps",          "v2h_charge_amps",          "Charge Amps",          "charge_amps",              1,  16,   1, "A"),
+    ];
+    for &(uid, oid, name, field, min, max, step, unit) in settings_numbers {
+        let tpl     = format!("{{{{value_json.settings.{}}}}}", field);
+        let cmd_tpl = format!("{{\"cmd\":{{\"SetSetting\":{{\"{}\":{}}}}}}}", field, "{{ value | int }}");
+        let payload = json!({
+            "unique_id": uid,
+            "object_id": oid,
+            "name": name,
+            "state_topic": state,
+            "value_template": tpl,
+            "command_topic": cmd_topic,
+            "command_template": cmd_tpl,
+            "min": min,
+            "max": max,
+            "step": step,
+            "unit_of_measurement": unit,
+            "entity_category": "config",
+            "availability_topic": avail,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device.clone(),
+        });
+        publish_one_discovery(client, format!("homeassistant/number/{}/config", uid), payload).await;
+    }
+
+    // Operator settings text entities: editable text field + sends SetSetting on change
+    // Used for HH:MM time fields (min/max = string length 5)
+    let settings_times: &[(&str, &str, &str, &str)] = &[
+        // (unique_id, object_id, name, settings_field)
+        ("beaglebone_v2h_rtd_start_time", "v2h_rtd_start_time", "RTD Start Time", "ready_to_drive_start_time"),
+        ("beaglebone_v2h_rtd_end_time",   "v2h_rtd_end_time",   "RTD End Time",   "ready_to_drive_end_time"),
+        ("beaglebone_v2h_off_peak_start", "v2h_off_peak_start", "Off-Peak Start", "off_peak_start"),
+        ("beaglebone_v2h_off_peak_end",   "v2h_off_peak_end",   "Off-Peak End",   "off_peak_end"),
+    ];
+    for &(uid, oid, name, field) in settings_times {
+        let tpl     = format!("{{{{value_json.settings.{}}}}}", field);
+        let cmd_tpl = format!("{{\"cmd\":{{\"SetSetting\":{{\"{}\":\"{}\"}}}}}}", field, "{{ value }}");
+        let payload = json!({
+            "unique_id": uid,
+            "object_id": oid,
+            "name": name,
+            "state_topic": state,
+            "value_template": tpl,
+            "command_topic": cmd_topic,
+            "command_template": cmd_tpl,
+            "min": 5,
+            "max": 5,
+            "pattern": r"^([0-1][0-9]|2[0-3]):[0-5][0-9]$",
+            "entity_category": "config",
+            "availability_topic": avail,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device.clone(),
+        });
+        publish_one_discovery(client, format!("homeassistant/text/{}/config", uid), payload).await;
+    }
+
+    // RTD day binary sensors: display-only, one per day (Mon=0 .. Sun=6)
+    let day_names = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    let day_labels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    for (i, (day, label)) in day_names.iter().zip(day_labels.iter()).enumerate() {
+        let uid = format!("beaglebone_v2h_rtd_day_{}", day);
+        let oid = format!("v2h_rtd_day_{}", day);
+        let tpl = format!("{{{{value_json.settings.ready_to_drive_days[{}] | lower}}}}", i);
+        let payload = json!({
+            "unique_id": uid,
+            "object_id": oid,
+            "name": format!("RTD {}", label),
+            "state_topic": state,
+            "value_template": tpl,
+            "payload_on": "true",
+            "payload_off": "false",
+            "entity_category": "config",
+            "availability_topic": avail,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device.clone(),
+        });
+        publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", uid), payload).await;
     }
 
     // Mode select — allows HA to change mode via v2h/command
-    let cmd_topic = format!("{}/command", cfg.base_topic);
     let mode_select = json!({
         "unique_id": "beaglebone_v2h_mode",
         "object_id": "beaglebone_v2h_mode",
