@@ -5,8 +5,7 @@
 # Dashboards must be applied manually in the HA UI:
 #   Dashboard → Edit → Raw config editor → paste from dashboards/
 #
-# After deploy: Developer Tools → YAML → Check Config, then restart HA
-# to pick up any changes to config/package_v2h_settings.yaml.
+# After deploy: Developer Tools → YAML → Reload Template Entities
 
 set -euo pipefail
 
@@ -38,7 +37,6 @@ sudo mount -t cifs "$SHARE" "$MOUNT_POINT" \
 
 mkdir -p "$MOUNT_POINT/sensors"
 mkdir -p "$MOUNT_POINT/templates"
-mkdir -p "$MOUNT_POINT/packages"
 
 echo "Copying sensors/..."
 cp "$SCRIPT_DIR/sensors/"*.yaml "$MOUNT_POINT/sensors/"
@@ -48,12 +46,7 @@ echo "Copying templates/..."
 cp "$SCRIPT_DIR/templates/"*.yaml "$MOUNT_POINT/templates/"
 for f in "$SCRIPT_DIR/templates/"*.yaml; do echo "  templates/$(basename "$f")"; done
 
-echo "Copying packages/..."
-cp "$SCRIPT_DIR/packages/"*.yaml "$MOUNT_POINT/packages/"
-for f in "$SCRIPT_DIR/packages/"*.yaml; do echo "  packages/$(basename "$f")"; done
-
 echo ""
 echo "Done. To reload in HA:"
 echo "  sensors/   → Developer Tools → YAML → Reload Template Entities"
 echo "  templates/ → Developer Tools → YAML → Reload Template Entities"
-echo "  packages/  → Developer Tools → YAML → Check Config, then restart HA"
