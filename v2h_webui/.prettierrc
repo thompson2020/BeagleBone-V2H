@@ -1,0 +1,7 @@
+{
+  "plugins": ["prettier-plugin-svelte"],
+  "svelteSortOrder": "scripts-markup-styles",
+  "svelteStrictMode": false,
+  "printWidth": 100,
+  "singleQuote": true
+}
