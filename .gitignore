@@ -6,3 +6,4 @@ v2h_homeassistant/.deploy_credentials
 v2h_octopus_audit/config.toml
 v2h_octopus_audit/ha_db.db
 v2h_octopus_audit/output/
+v2h_octopus_audit/.venv
