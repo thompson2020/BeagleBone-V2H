@@ -1,0 +1,151 @@
+views:
+  - type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: markdown
+            content: |-
+              ## Create current_day and next_day sensors
+              Temporary - Once on agile these will come from bottlecapDave
+
+              **Logic:**
+
+              sensor/agile_export.yaml
+               - agile_export_current_day_raw
+               - agile_export_next_day_raw
+                populates from Octopus REST api
+
+              templates/agile_export.yaml
+               - agile_export_current_day_rates
+               - agile_export_next_day_rates
+               - agile_export_current_rate
+               task raw data and formats similar to BottlecapDave sensors
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.agile_export_current_rate
+            vertical: false
+            features_position: bottom
+          - type: custom:octopus-energy-rates-card
+            currentEntity: sensor.agile_export_current_day_rates
+            cols: 2
+            hour12: false
+            showday: true
+            showpast: true
+            title: >-
+              Octopus Agile Export(Current Day)  orange-Export Solar 
+              green-Force Export
+            unitstr: p
+            lowlimit: null
+            mediumlimit: sensor.agile_import_cheapest_rate
+            highlimit: sensor.smart_export_threshold
+            roundUnits: 1
+            cheapest: true
+            multiplier: 100
+            exportrates: true
+          - type: custom:octopus-energy-rates-card
+            currentEntity: sensor.agile_export_next_day_rates
+            cols: 2
+            hour12: false
+            showday: true
+            showpast: true
+            title: Octopus Agile Export(Next Day)
+            unitstr: p
+            lowlimit: null
+            mediumlimit: sensor.agile_import_cheapest_rate
+            highlimit: sensor.smart_export_threshold
+            roundUnits: 1
+            cheapest: true
+            multiplier: 100
+            exportrates: true
+      - type: grid
+        cards:
+          - type: markdown
+            content: >
+              ## Smart Export Status
+
+
+              **Logic — turn ON when all true:**
+
+              - Current Agile export rate > 0
+
+              - Export rate ≥ cheapest import rate × multiplier
+
+
+              **Cheapest import rate:** minimum rate across all today's import
+              slots
+
+
+              **Multiplier (default 200%):** export must be at least 2× cheapest
+              import.
+
+              Covers ~85% round-trip battery efficiency plus profit margin.
+
+              e.g. 6.9p import × 2.0 = 13.8p/kWh threshold to export
+
+
+              Automation publishes to `indra_from_ha/smart_export/request`
+          - type: entities
+            title: Inputs
+            show_header_toggle: false
+            entities:
+              - entity: sensor.agile_export_current_rate
+                name: Export Rate (p/kWh)
+              - entity: sensor.agile_import_cheapest_rate
+                name: Cheapest Import Rate (p/kWh)
+              - entity: sensor.smart_export_threshold
+          - type: entities
+            title: Settings
+            show_header_toggle: false
+            entities:
+              - entity: input_number.smart_export_multiplier
+                name: Rate Multiplier
+          - type: vertical-stack
+            cards:
+              - type: tile
+                entity: sensor.agile_export_current_rate
+                name: Current Export Rate
+                icon: mdi:transmission-tower-export
+                state_content: state
+                vertical: true
+              - type: markdown
+                content: >
+                  **Rate period ends:** {{
+                  state_attr('sensor.agile_export_current_rate', 'rate_end') |
+                  as_timestamp | timestamp_custom('%H:%M') }}
+
+
+                  **Threshold:** {{ (states('sensor.agile_import_cheapest_rate')
+                  | float(0) * states('input_number.smart_export_multiplier') |
+                  float(200) / 100) | round(1) }}p/kWh
+          - type: entities
+            title: Smart Export
+            show_header_toggle: false
+            entities:
+              - entity: sensor.smart_export_status
+                name: Smart Export Status
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+          - type: grid
+            columns: 1
+            cards:
+              - type: markdown
+                content: |-
+                  ## 🧪 smartexport_status written to mqtt
+                  Settings-> Automation 
+
+                  Publish SmartCharge → mbmd MQTT   
+
+                  ## 🧪 smartexport_status disable Zappi & Eddi Control
+                  Settings-> Automation 
+
+                  Publish SmartExport → Zappi & Eddi Control  
+          - type: tile
+            entity: select.myenergi_zappi_22323585_charge_mode
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 12
+              rows: 1

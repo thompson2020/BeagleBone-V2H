@@ -1,0 +1,26 @@
+views:
+  - type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: entities
+            title: Inputs
+            show_header_toggle: false
+            entities:
+              - entity: sensor.myenergi_zappi_22323585_internal_load_ct1
+                name: Zappi Power
+              - entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+                name: Eddi Power
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+          - type: grid
+            columns: 1
+            cards:
+              - type: markdown
+                content: |
+                  ## 🧪 ev_drain_protection written to mqtt
+                  Settings-> Automation 
+
+                  Publish Smart EV Drain Protection → mbmd MQTT   

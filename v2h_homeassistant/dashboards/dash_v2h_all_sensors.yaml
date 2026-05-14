@@ -1,0 +1,128 @@
+views:
+  - type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: V2H
+          - type: tile
+            entity: select.v2h_mode
+      - type: grid
+        cards:
+          - type: heading
+            heading: V2H
+          - type: tile
+            entity: sensor.v2h_ac_power
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: tile
+            entity: sensor.v2h_active_mode
+          - type: tile
+            entity: sensor.v2h_charging_current_request
+          - type: tile
+            entity: sensor.v2h_dc_output_amps
+          - type: tile
+            entity: sensor.v2h_dc_output_volts
+          - type: tile
+            entity: sensor.v2h_dc_power
+          - type: tile
+            entity: sensor.v2h_efficiency
+          - type: tile
+            entity: binary_sensor.v2h_ev_drain_protection_active
+          - type: tile
+            entity: binary_sensor.v2h_ev_drain_protection_enabled_2
+          - type: tile
+            entity: binary_sensor.v2h_ev_drain_protection_request
+          - type: tile
+            entity: sensor.v2h_grid_phase_power
+          - type: tile
+            entity: sensor.v2h_grid_power
+          - type: tile
+            entity: binary_sensor.v2h_off_peak_charging_active
+          - type: tile
+            entity: binary_sensor.v2h_off_peak_charging_enabled
+          - type: tile
+            entity: binary_sensor.v2h_off_peak_charging_request
+          - type: tile
+            entity: sensor.v2h_operation_mode
+          - type: tile
+            entity: sensor.v2h_pre_fan_duty
+          - type: tile
+            entity: sensor.v2h_pre_state
+          - type: tile
+            entity: sensor.v2h_pre_temperature
+          - type: tile
+            entity: binary_sensor.v2h_ready_to_drive_active
+          - type: tile
+            entity: binary_sensor.v2h_ready_to_drive_enabled
+          - type: tile
+            entity: binary_sensor.v2h_ready_to_drive_request
+          - type: tile
+            entity: binary_sensor.v2h_smart_charge_active
+          - type: tile
+            entity: binary_sensor.v2h_smart_charge_enabled_2
+          - type: tile
+            entity: binary_sensor.v2h_smart_charge_request
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_active
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_enabled_2
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_request
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_solar_active
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_solar_enabled
+          - type: tile
+            entity: binary_sensor.v2h_smart_export_solar_request
+          - type: tile
+            entity: sensor.v2h_soc
+      - type: grid
+        cards:
+          - type: heading
+            heading: V2H
+          - type: tile
+            entity: number.v2h_charge_amps
+          - type: tile
+            entity: switch.v2h_charge_eco
+          - type: tile
+            entity: number.v2h_charge_soc_limit
+          - type: tile
+            entity: switch.v2h_ev_drain_protection
+          - type: tile
+            entity: switch.v2h_export_excess_solar
+          - type: tile
+            entity: number.v2h_v2h_max_amps
+          - type: tile
+            entity: switch.v2h_off_peak_charging
+          - type: tile
+            entity: text.v2h_off_peak_end
+          - type: tile
+            entity: text.v2h_off_peak_start
+          - type: tile
+            entity: switch.v2h_ready_to_drive
+          - type: tile
+            entity: text.v2h_rtd_end_time
+          - type: tile
+            entity: number.v2h_rtd_soc_target
+          - type: tile
+            entity: text.v2h_rtd_start_time
+          - type: tile
+            entity: switch.v2h_self_use
+          - type: tile
+            entity: switch.v2h_smart_charge
+          - type: tile
+            entity: switch.v2h_smart_export
+          - type: tile
+            entity: number.v2h_smart_export_limit
+          - type: tile
+            entity: number.v2h_smart_export_soc_min
+          - type: tile
+            entity: switch.v2h_smart_export_solar
+          - type: tile
+            entity: number.v2h_v2h_soc_max
+          - type: tile
+            entity: number.v2h_v2h_soc_max_boost
+          - type: tile
+            entity: number.v2h_v2h_soc_min

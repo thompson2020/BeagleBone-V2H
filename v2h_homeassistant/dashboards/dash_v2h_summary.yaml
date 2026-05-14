@@ -1,0 +1,1147 @@
+title: V2H
+views:
+  - type: sections
+    title: V2H Charger
+    path: v2h-simple
+    icon: mdi:car-electric
+    sections:
+      - type: grid
+        cards:
+          - type: custom:mushroom-template-card
+            primary: >
+              {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
+              == 'V2h'       %}V2H Active {% elif mode == 'Charge'    %}Charging
+              {% elif mode == 'Discharge' %}Discharging {% elif mode ==
+              'Idle'      %}Idle {% else                     %}{{ mode }} {%
+              endif %}
+            secondary: >
+              {% set a = states('sensor.v2h_dc_output_amps') | float(0) %} {%
+              if   a <  0 %}Discharging {{ (a | abs) | round(1) }} A {% elif a
+              >  0 %}Charging {{ a | round(1) }} A {% else        %}Standby {%
+              endif %}
+            icon: >
+              {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
+              == 'V2h'       %}mdi:home-battery {% elif mode == 'Charge'   
+              %}mdi:battery-charging-100 {% elif mode == 'Discharge'
+              %}mdi:battery-arrow-up {% else                    
+              %}mdi:battery-off-outline {% endif %}
+            icon_color: >
+              {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
+              == 'V2h'       %}green {% elif mode == 'Charge'    %}blue {% elif
+              mode == 'Discharge' %}orange {% else                     %}grey {%
+              endif %}
+            badge_icon: >
+              {% if   is_state('binary_sensor.v2h_ready_to_drive_active',  
+              'on') %}mdi:car-clock {% elif
+              is_state('binary_sensor.v2h_off_peak_charging_active','on')
+              %}mdi:clock-time-two {% elif
+              is_state('binary_sensor.v2h_smart_charge_active',     'on')
+              %}mdi:lightning-bolt {% elif
+              is_state('binary_sensor.v2h_smart_export_active',     'on')
+              %}mdi:transmission-tower-export {% elif
+              is_state('binary_sensor.v2h_smart_export_solar_active','on')
+              %}mdi:solar-power {% else %}{% endif %}
+            badge_color: >
+              {% if   is_state('binary_sensor.v2h_ready_to_drive_active',  
+              'on') %}teal {% elif
+              is_state('binary_sensor.v2h_off_peak_charging_active','on')
+              %}purple {% elif
+              is_state('binary_sensor.v2h_smart_charge_active',     'on') %}blue
+              {% elif is_state('binary_sensor.v2h_smart_export_active',    
+              'on') %}orange {% elif
+              is_state('binary_sensor.v2h_smart_export_solar_active','on')
+              %}yellow {% else %}grey {% endif %}
+            tap_action:
+              action: none
+            grid_options:
+              rows: auto
+              columns: 12
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                name: Idle
+                icon: mdi:pause-circle-outline
+                tap_action:
+                  action: call-service
+                  service: mqtt.publish
+                  service_data:
+                    topic: v2h/command
+                    payload: '{"cmd":{"SetMode":"Idle"}}'
+                styles:
+                  card:
+                    - background-color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Idle'
+                            ? 'rgba(148,163,184,0.25)' : 'var(--card-background-color)' ]]]
+                    - border: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Idle'
+                            ? '2px solid #94a3b8' : '1px solid var(--divider-color)' ]]]
+                  icon:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Idle'
+                            ? '#94a3b8' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Idle'
+                            ? '#94a3b8' : 'var(--secondary-text-color)' ]]]
+              - type: custom:button-card
+                name: V2H
+                icon: mdi:home-battery
+                tap_action:
+                  action: call-service
+                  service: mqtt.publish
+                  service_data:
+                    topic: v2h/command
+                    payload: '{"cmd":{"SetMode":"V2h"}}'
+                styles:
+                  card:
+                    - background-color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'V2h'
+                            ? 'rgba(74,222,128,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'V2h'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                  icon:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'V2h'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'V2h'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+              - type: custom:button-card
+                name: Boost
+                icon: mdi:battery-charging-100
+                tap_action:
+                  action: call-service
+                  service: mqtt.publish
+                  service_data:
+                    topic: v2h/command
+                    payload: '{"cmd":{"SetMode":"Charge"}}'
+                styles:
+                  card:
+                    - background-color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Charge'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Charge'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                  icon:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Charge'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: >
+                        [[[ return states['sensor.v2h_operation_mode'].state ===
+                        'Charge'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+          - type: custom:bar-card
+            title: null
+            entities:
+              - entity: sensor.v2h_soc
+                name: Battery
+                icon: mdi:none
+                min: 0
+                max: 100
+                severity:
+                  - from: 0
+                    to: 20
+                    color: var(--red-color)
+                  - from: 20
+                    to: 50
+                    color: var(--orange-color)
+                  - from: 50
+                    to: 90
+                    color: var(--green-color)
+                  - from: 90
+                    to: 100
+                    color: var(--green-color)
+            direction: right
+            height: 28px
+            animation:
+              state: 'off'
+            positions:
+              icon: 'off'
+              indicator: inside
+              name: outside
+              value: inside
+            rounded: true
+            card_mod:
+              style: |
+                ha-card {
+                  border-radius: 18px;
+                  padding: 12px;
+                }
+
+                bar-card-currentbar {
+                  border-radius: 12px;
+                }
+          - type: custom:gauge-card-pro
+            entity: sensor.v2h_ac_power
+            entity2: sensor.v2h_dc_power
+            min: -6000
+            max: 6000
+            needle: true
+            segments:
+              - from: -6000
+                color: var(--red-color)
+              - from: 0
+                color: var(--red-color)
+              - from: 0
+                color: var(--green-color)
+              - from: 6000
+                color: var(--green-color)
+            inner:
+              mode: on_main
+              needle_color: var(--info-color)
+            titles:
+              primary:
+                value: V2H Power
+            value_texts:
+              primary:
+                value: '{{ states(''sensor.v2h_ac_power'') | float | round(0) }}'
+                unit_of_measurement: W AC
+              secondary:
+                value: '{{ states(''sensor.v2h_dc_power'') | float | round(0) }}'
+                color: var(--info-color)
+                unit_of_measurement: W DC
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:gauge-card-pro
+            entity: sensor.v2h_grid_power
+            entity2: sensor.v2h_grid_phase_power
+            min: -6000
+            max: 6000
+            needle: true
+            segments:
+              - from: -6000
+                color: var(--red-color)
+              - from: 0
+                color: var(--red-color)
+              - from: 0
+                color: var(--green-color)
+              - from: 6000
+                color: var(--green-color)
+            inner:
+              mode: on_main
+              needle_color: var(--info-color)
+            titles:
+              primary:
+                value: Grid Power
+            value_texts:
+              primary:
+                value: '{{ states(''sensor.v2h_grid_power'') | float | round(0) }}'
+                unit_of_measurement: W Total
+              secondary:
+                value: '{{ states(''sensor.v2h_grid_phase_power'') | float | round(0) }}'
+                color: var(--info-color)
+                unit_of_measurement: W Phase
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:bar-card
+            title: null
+            entities:
+              - entity: sensor.v2h_efficiency
+                name: EFF
+                icon: mdi:none
+                min: 0
+                max: 100
+                severity:
+                  - from: 0
+                    to: 70
+                    color: var(--red-color)
+                  - from: 70
+                    to: 90
+                    color: var(--orange-color)
+                  - from: 90
+                    to: 100
+                    color: var(--green-color)
+            direction: right
+            height: 28px
+            animation:
+              state: 'off'
+            positions:
+              icon: 'off'
+              indicator: inside
+              name: outside
+              value: inside
+            rounded: true
+            card_mod:
+              style: |
+                ha-card {
+                  border-radius: 18px;
+                  padding: 12px;
+                }
+            grid_options:
+              columns: 6
+              rows: auto
+          - type: custom:bar-card
+            title: null
+            entities:
+              - entity: sensor.v2h_pre_temperature
+                name: PRE
+                icon: mdi:none
+                min: 0
+                max: 80
+                severity:
+                  - from: 0
+                    to: 30
+                    color: var(--green-color)
+                  - from: 30
+                    to: 50
+                    color: var(--orange-color)
+                  - from: 50
+                    to: 80
+                    color: var(--red-color)
+              - entity: sensor.v2h_pre_fan_duty
+                name: PRE
+                icon: mdi:none
+                min: 0
+                max: 100
+                severity:
+                  - from: 0
+                    to: 40
+                    color: var(--green-color)
+                  - from: 40
+                    to: 75
+                    color: var(--orange-color)
+                  - from: 75
+                    to: 100
+                    color: var(--red-color)
+            direction: right
+            height: 28px
+            animation:
+              state: 'off'
+            positions:
+              icon: 'off'
+              indicator: inside
+              name: outside
+              value: inside
+            rounded: true
+            card_mod:
+              style: |
+                ha-card {
+                  border-radius: 18px;
+                  padding: 12px;
+                }
+            grid_options:
+              columns: 6
+              rows: auto
+      - type: grid
+        cards:
+          - type: custom:expander-card
+            title: V2H Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_v2h_soc_min
+                    name: SoC Min
+                  - entity: number.v2h_v2h_soc_max
+                    name: SoC Max
+                  - entity: number.v2h_v2h_max_amps
+                    name: Max Amps
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_self_use
+                name: Self Use
+                icon: mdi:home-lightning-bolt
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_export_excess_solar
+                name: Export Solar
+                icon: mdi:solar-power-variant
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: heading
+            heading: Time/Event Based
+            heading_style: subtitle
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_ready_to_drive
+                name: Ready to Drive
+                icon: mdi:steering
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_ready_to_drive_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_ready_to_drive_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:expander-card
+            title: Ready to Drive Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_rtd_soc_target
+                    name: SoC Target
+                  - entity: text.v2h_rtd_start_time
+                    name: Start Time
+                  - entity: text.v2h_rtd_end_time
+                    name: End Time
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_off_peak_charging
+                name: Off-Peak
+                icon: mdi:weather-night
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_off_peak_charging_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_off_peak_charging_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:expander-card
+            title: Off-Peak Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: text.v2h_off_peak_start
+                    name: Start
+                  - entity: text.v2h_off_peak_end
+                    name: End
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: heading
+            heading: Smart
+            heading_style: subtitle
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_smart_export
+                name: Smart Export
+                icon: mdi:transmission-tower-export
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:expander-card
+            title: Smart Export Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_smart_export_soc_min
+                    name: SoC Min
+                  - entity: number.v2h_smart_export_limit
+                    name: Export Limit
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_smart_export_solar
+                name: Export Solar
+                icon: mdi:solar-power-variant
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_solar_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_solar_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_smart_charge
+                name: Smart Charge
+                icon: mdi:battery-charging-outline
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_charge_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_charge_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:expander-card
+            title: Smart Charge Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_charge_soc_limit
+                    name: SoC Limit
+                  - entity: number.v2h_charge_amps
+                    name: Amps
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_ev_drain_protection
+                name: EV Drain
+                icon: mdi:battery-heart
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_ev_drain_protection_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_ev_drain_protection_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+      - type: grid
+        cards:
+          - type: custom:expander-card
+            title: Boost Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_charge_soc_limit
+                    name: SoC Limit
+                  - entity: number.v2h_charge_amps
+                    name: Amps
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_charge_eco
+                name: Eco Mode
+                icon: mdi:leaf
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+              - type: custom:button-card
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: transparent
+                    - border: none
+                    - box-shadow: none
+            grid_options:
+              columns: 12
+              rows: auto
+      - type: grid
+        cards:
+          - type: heading
+            heading: Charger
+            heading_style: title
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Charger
+            graph_span: 2h
+            yaxis:
+              - min: -6000
+                max: 6000
+                decimals: 0
+                apex_config:
+                  tickAmount: 6
+            apex_config:
+              chart:
+                height: 300
+              grid:
+                show: true
+                borderColor: rgba(128,128,128,0.3)
+              annotations:
+                yaxis:
+                  - 'y': 0
+                    borderColor: '#ffffff'
+                    strokeDashArray: 0
+                    opacity: 0.9
+                    label:
+                      text: 0 W
+              stroke:
+                width: 2
+              legend:
+                show: true
+            series:
+              - entity: sensor.v2h_dc_power
+                name: DC (W)
+                color: '#60a5fa'
+                type: line
+              - entity: sensor.v2h_ac_power
+                name: AC (W)
+                color: '#f59e0b'
+                type: line
+            grid_options:
+              columns: 12
+          - type: heading
+            heading: Grid
+            heading_style: title
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Grid
+            graph_span: 2h
+            span:
+              end: minute
+            yaxis:
+              - id: power
+                min: -10000
+                max: 10000
+                decimals: 0
+                apex_config:
+                  tickAmount: 8
+            apex_config:
+              chart:
+                height: 320
+              grid:
+                show: true
+                borderColor: rgba(128,128,128,0.25)
+                strokeDashArray: 2
+              stroke:
+                width: 2
+                curve: smooth
+              legend:
+                show: true
+                position: top
+              yaxis:
+                forceNiceScale: true
+              annotations:
+                yaxis:
+                  - 'y': 0
+                    borderColor: '#ffffff'
+                    strokeDashArray: 0
+                    opacity: 1
+                    label:
+                      text: 0 W
+                      style:
+                        background: '#222'
+                        color: '#fff'
+            series:
+              - entity: sensor.v2h_grid_power
+                name: Grid (W)
+                color: '#60a5fa'
+                type: line
+                group_by:
+                  func: avg
+                  duration: 1min
+              - entity: sensor.v2h_grid_phase_power
+                name: Phase (W)
+                color: '#f59e0b'
+                type: line
+                group_by:
+                  func: avg
+                  duration: 1min
+            grid_options:
+              columns: 12

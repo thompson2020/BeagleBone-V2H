@@ -1,0 +1,159 @@
+title: Smart Charging Control
+views:
+  - title: SmartCharge
+    path: smartcharge
+    icon: mdi:ev-station
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: markdown
+            content: |
+              ## Smart Charge Status
+
+              **Logic — turn ON when all true:**
+              - Octopus off-peak dispatch is active
+              - Now is before `current_end` of dispatch window
+              - Zappi load > 0W  **OR**  within current 30-min block (grace)
+
+              **Turn OFF at the earlier of:**
+              - `current_end` timestamp from off-peak sensor
+              - End of current 30-min block once Zappi drops to 0W
+
+              Automation publishes to `indra_from_ha/smartcharge/status`
+          - type: vertical-stack
+            cards:
+              - type: tile
+                entity: >-
+                  binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak
+                name: Off-Peak / Cheap Rate
+                icon: mdi:clock-time-eight-outline
+                state_content: state
+                vertical: true
+              - type: markdown
+                content: >
+
+
+
+                  **Current slot ends:** {{
+                  as_timestamp(states.binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak.attributes.current_end)
+                  | timestamp_custom('%H:%M') }}
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: sensor.myenergi_zappi_22323585_internal_load_ct1
+                name: Zappi Load (W)
+          - type: entities
+            title: Smart Charge Sensors
+            show_header_toggle: false
+            entities:
+              - entity: sensor.smartcharge_status_basic
+                name: Smart Charge Basic (zappi watts only)
+              - entity: sensor.smartcharge_status
+                name: Smart Charge Status (new)
+              - entity: sensor.smartcharge_status_end_time
+                name: Ends
+      - type: grid
+        columns: 2
+        cards:
+          - type: markdown
+            content: |+
+              ## 🧪 smartcharge_status written to mqtt - smartcharge
+
+
+          - type: markdown
+            content: |
+
+              Settings-> Automation 
+
+              Publish SmartCharge → mbmd MQTT
+          - type: markdown
+            content: >
+              Settings → Automations
+
+
+              **Publish SmartCharge Status (Octopus and MyEnergi) to mbmd MQTT**
+
+
+              ⚠️ Automation currently triggers on `smartcharge_status_basic` —
+              update trigger to `smartcharge_status` once verified
+      - type: grid
+        cards:
+          - type: markdown
+            content: |+
+              ## 🧪 smartcharge_status used to control eddi
+
+
+          - type: markdown
+            content: |
+
+              Settings-> Automation 
+
+              Publish SmartCharge → Eddi Boost Control
+          - type: tile
+            entity: select.myenergi_eddi_24456595_operating_mode
+            grid_options:
+              columns: full
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.myenergi_eddi_24456595_status
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+            vertical: false
+            features_position: bottom
+          - type: button
+            name: Eddi Stopped
+            icon: mdi:stop-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_set_stopped
+          - type: button
+            name: Eddi Normal
+            icon: mdi:play-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_set_normal
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_number.eddi_boost_minutes
+                name: Boost
+                icon: mdi:timer-outline
+          - type: button
+            name: Cancel
+            icon: mdi:stop-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_boost_cancel
+          - type: button
+            name: Boost
+            icon: mdi:flash
+            tap_action:
+              action: call-service
+              service: script.eddi_boost
+            entity: input_number.eddi_boost_minutes
+      - cards:
+          - type: heading
+            heading: History
+          - title: History
+            type: history-graph
+            hours_to_show: 36
+            entities:
+              - entity: sensor.smartcharge_status
+              - entity: sensor.myenergi_zappi_22323585_internal_load_ct1
+              - entity: >-
+                  binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak
+              - entity: >-
+                  sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_state
+              - entity: >-
+                  sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak_current_end
+              - entity: >-
+                  binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching
+            grid_options:
+              columns: full
+        column_span: 4
