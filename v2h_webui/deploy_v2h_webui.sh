@@ -6,7 +6,7 @@ REMOTE_IP="192.168.10.100"
 REMOTE_PATH="/home/unit/v2h_webui/svelte-skeleton-ui"
 SERVICE="v2h_webui.service"
 
-PROJECT_DIR="$HOME/v2h_webui/svelte-skeleton-ui"
+PROJECT_DIR="$HOME/BeagleBone-V2H/v2h_webui/svelte-skeleton-ui"
 
 echo "========================================"
 echo "📤 Deploying V2H Web UI to Pi (${REMOTE_IP})"

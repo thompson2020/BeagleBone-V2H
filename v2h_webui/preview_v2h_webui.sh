@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="$HOME/v2h_webui/svelte-skeleton-ui"
+PROJECT_DIR="$HOME/BeagleBone-V2H/v2h_webui/svelte-skeleton-ui"
 
 echo "========================================"
 echo "🔧 Starting V2H Web UI Dev Server"
