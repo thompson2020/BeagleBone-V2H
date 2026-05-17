@@ -44,7 +44,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
                 Ok(Event::Incoming(rumqttc::Packet::ConnAck(_))) => {
                     // Fires on first connect and every reconnect. With clean_session(true)
                     // the broker discards subscriptions on disconnect, so we resubscribe here.
-                    log::info!("MQTT: connected/reconnected — subscribing to topics");
+                    log::info!("MQTT: connected/reconnected -- subscribing to topics");
                     let avail = format!("{}/availability", mqtt_config_clone.base_topic);
                     if let Err(e) = client_for_reconnect
                         .publish(&avail, QoS::AtLeastOnce, true, "online")
@@ -104,7 +104,7 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    // Connection dropped — rumqttc will reconnect automatically.
+                    // Connection dropped -- rumqttc will reconnect automatically.
                     // Log it so disconnects are visible, then keep polling.
                     log::error!("MQTT: connection error | {e:?}");
                 }
@@ -155,10 +155,10 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
 }
 
 /// Extract a numeric value from a payload. Handles:
-///   "1"                          — plain number string
-///   true / false                 — bare JSON boolean (→ 1.0 / 0.0)
-///   {"field": 1}                 — JSON object, dotted path
-///   {"field": true}              — JSON object with boolean value
+///   "1"                          -- plain number string
+///   true / false                 -- bare JSON boolean (-> 1.0 / 0.0)
+///   {"field": 1}                 -- JSON object, dotted path
+///   {"field": true}              -- JSON object with boolean value
 fn extract_value(payload: &str, field: &str) -> Option<f32> {
     use serde_json::Value;
     if let Ok(v) = payload.parse::<f32>() {
@@ -171,7 +171,7 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
             return None;
         }
     };
-    // Bare boolean: true → 1.0, false → 0.0
+    // Bare boolean: true -> 1.0, false -> 0.0
     if let Some(b) = json.as_bool() {
         return Some(if b { 1.0 } else { 0.0 });
     }
@@ -218,7 +218,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_charge_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_charge_request(enabled, false);
-            log::debug!("MQTT: smart_charge_request → {}", enabled);
+            log::debug!("MQTT: smart_charge_request -> {}", enabled);
         }
     }
 
@@ -226,7 +226,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_ev_drain_protection_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_ev_drain_protection_request(enabled, false);
-            log::info!("MQTT: ev_drain_protection_request → {}", enabled);
+            log::debug!("MQTT: ev_drain_protection_request -> {}", enabled);
         }
     }
 
@@ -234,7 +234,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_request(enabled, false);
-            log::debug!("MQTT: smart_export_request → {}", enabled);
+            log::debug!("MQTT: smart_export_request -> {}", enabled);
         }
     }
 
@@ -242,7 +242,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
         if let Some(v) = extract_value(&payload, &cfg.mqtt_smart_export_excess_solar_field) {
             let enabled = v > 0.0;
             SUPERVISORY.write().await.update_smart_export_excess_solar_request(enabled, false);
-            log::debug!("MQTT: smart_export_excess_solar_request → {}", enabled);
+            log::debug!("MQTT: smart_export_excess_solar_request -> {}", enabled);
         }
     }
 }
@@ -270,7 +270,7 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MqttConfig, 
 
 
 /// Returns true if `last` is older than `timeout_seconds`.
-/// Never-received (None) returns false — no data yet is not the same as stale data.
+/// Never-received (None) returns false -- no data yet is not the same as stale data.
 fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
     match last {
         Some(t) => {
@@ -325,7 +325,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         ("beaglebone_v2h_efficiency_pct",         "Efficiency",
          "{{ value_json.meter.efficiency | default(0) | round(1) }}", "%", ""),
         ("beaglebone_v2h_pre_temp_c",             "PRE Temperature",
-         "{{ value_json.pre.temp | round(1) }}", "°C", "temperature"),
+         "{{ value_json.pre.temp | round(1) }}", "degC", "temperature"),
         ("beaglebone_v2h_pre_fan_duty_pct",       "PRE Fan Duty",
          "{{ value_json.pre.fan_duty }}", "%", ""),
         ("beaglebone_v2h_charging_current_req_a", "Charging Current Request",
@@ -550,7 +550,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", uid), payload).await;
     }
 
-    // Mode select — allows HA to change mode via v2h/command
+    // Mode select -- allows HA to change mode via v2h/command
     let mode_select = json!({
         "unique_id": "beaglebone_v2h_mode",
         "object_id": "beaglebone_v2h_mode",

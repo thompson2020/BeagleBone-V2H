@@ -123,7 +123,7 @@ async fn accept_connection(stream: TcpStream, events_tx: EventsTx, mode_tx: Chad
         }
     });
 
-    // Read loop — process incoming commands, send acks back through the outbox.
+    // Read loop -- process incoming commands, send acks back through the outbox.
     while let Some(result) = read.next().await {
         let text = match result {
             Ok(Message::Text(t)) => t,
@@ -174,12 +174,12 @@ async fn process_ws_message(
     let inst = match serde_json::from_str::<Instruction>(cmd) {
         Ok(i) => i,
         Err(e) => {
-            log::error!("WS deserialise error: {cmd} — {e:?}");
+            log::error!("WS deserialise error: {cmd} -- {e:?}");
             return Ok(Message::Text(BAD_ACK.to_string()));
         }
     };
 
-    // WS-only queries — need a response sent back over the socket
+    // WS-only queries -- need a response sent back over the socket
     match &inst.cmd {
         Cmd::GetMode => {
             let mode = *CHADEMO.lock().await.state();
@@ -219,7 +219,7 @@ async fn process_ws_message(
         _ => {}
     }
 
-    // Shared mutations — same logic as MQTT path
+    // Shared mutations -- same logic as MQTT path
     crate::data_io::commands::dispatch(inst.cmd, mode_tx).await;
     Ok(Message::Text(r#"{"ack":"ok"}"#.to_string()))
 }

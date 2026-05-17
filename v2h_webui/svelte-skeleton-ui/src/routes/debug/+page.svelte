@@ -98,9 +98,18 @@
 	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	let socket: WebSocket;
 
+	let serverLevel = 'info';
+
 	function sendLogControl(enable: boolean) {
 		if (socket && socket.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify({ cmd: enable ? 'StartLogs' : 'StopLogs' }));
+		}
+	}
+
+	function setServerLevel(level: string) {
+		if (socket && socket.readyState === WebSocket.OPEN) {
+			socket.send(JSON.stringify({ cmd: { SetLogLevel: level } }));
+			serverLevel = level;
 		}
 	}
 
@@ -183,6 +192,18 @@
 	<button on:click={() => { entries = []; pending = []; }} class="btn btn-sm variant-ghost-surface text-xs py-0.5 px-2">
 		Clear
 	</button>
+
+	<div class="w-px h-5 bg-surface-500"></div>
+
+	<span class="text-xs text-surface-400 font-mono">Server level</span>
+	<div class="btn-group variant-ghost-surface text-xs">
+		{#each ['info', 'debug', 'trace'] as lvl}
+			<button
+				on:click={() => setServerLevel(lvl)}
+				class="py-0.5 px-2 uppercase font-mono {serverLevel === lvl ? 'variant-filled-primary' : ''}"
+			>{lvl}</button>
+		{/each}
+	</div>
 
 	<span class="text-xs text-surface-500 ml-auto">
 		{#if !wsConnected}<span class="text-red-400 mr-2">● offline</span>{:else}<span class="text-green-400 mr-2">● live</span>{/if}

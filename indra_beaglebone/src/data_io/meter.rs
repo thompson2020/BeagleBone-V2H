@@ -133,14 +133,14 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
         let mode_tx_for_staleness = mode_tx.clone();
         tokio::spawn(start_meter_staleness_checker(meter_config.clone(), mode_tx_for_staleness));
 
-        // Run the eventloop inline — this keeps `client` alive for the lifetime of this task.
+        // Run the eventloop inline -- this keeps `client` alive for the lifetime of this task.
         // Subscriptions are done inside ConnAck so they are re-issued on every reconnect.
         loop {
             match eventloop.poll().await {
                 Ok(Event::Incoming(rumqttc::Packet::ConnAck(_))) => {
                     // Fires on first connect and on every reconnect. With clean_session(true)
                     // the broker discards subscriptions on disconnect, so we must resubscribe here.
-                    log::info!("MQTT Meter: connected/reconnected — subscribing to topics");
+                    log::info!("MQTT Meter: connected/reconnected -- subscribing to topics");
                     if let Err(e) = client
                         .subscribe(&meter_config.mqtt_meter_total_power_topic, QoS::AtMostOnce)
                         .await
@@ -178,7 +178,7 @@ pub async fn meter(meter_config: MeterConfig, mode_tx: ChademoTx) -> Result<(), 
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    // Connection dropped — rumqttc will reconnect automatically.
+                    // Connection dropped -- rumqttc will reconnect automatically.
                     // Log it so disconnects are visible, then keep polling.
                     log::error!("MQTT Meter: connection error | {e:?}");
                 }
@@ -217,7 +217,7 @@ fn extract_value(payload: &str, field: &str) -> Option<f32> {
 }
 
 /// Handle a single MQTT Publish message.  Checks the topic against the
-/// configured total and phase topics — both `if` blocks can fire on the same
+/// configured total and phase topics -- both `if` blocks can fire on the same
 /// message when total and phase share a topic but use different fields.
 async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig) {
     let payload = String::from_utf8_lossy(&msg.payload);
@@ -281,11 +281,11 @@ async fn handle_publish(msg: rumqttc::mqttbytes::v4::Publish, cfg: &MeterConfig)
 
 async fn mark_total_power_as_stale() {
     METER.write().await.total_w = None;
-    log::error!("MQTT Meter: updated: total power is STALE → treating as offline");
+    log::error!("MQTT Meter: updated: total power is STALE -> treating as offline");
 }
 async fn mark_phase_power_as_stale() {
     METER.write().await.phase_w = None;
-    log::error!("MQTT Meter: phase power STALE — treating as offline");
+    log::error!("MQTT Meter: phase power STALE -- treating as offline");
 }
 
 
@@ -309,7 +309,7 @@ fn is_stale(last: Option<Instant>, timeout_seconds: u64, label: &str) -> bool {
                 false
             }
         }
-        None => false, // no data yet — nothing to mark stale
+        None => false, // no data yet -- nothing to mark stale
     }
 }
 
@@ -324,7 +324,7 @@ async fn start_meter_staleness_checker(meter_config: MeterConfig, mode_tx: Chade
         if is_stale(snapshot.last_total_update, timeout, "total power") {
             let current_mode = *crate::chademo::state::CHADEMO.lock().await.state();
             if current_mode == OperationMode::V2h {
-                log::warn!("Meter staleness: total power stale + V2H active → forcing Idle");
+                log::warn!("Meter staleness: total power stale + V2H active -> forcing Idle");
                 let _ = mode_tx.send(OperationMode::Idle).await;
             }
             mark_total_power_as_stale().await;

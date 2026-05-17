@@ -58,7 +58,7 @@ const UPPERBAR: u8 = 6;
 const LOWERBAR: u8 = 8;
 const ADDR: u8 = 0x60;
 
-// Logo blink states — use PWM0 (slow) bit-pair (10) per colour channel
+// Logo blink states -- use PWM0 (slow) bit-pair (10) per colour channel
 const LOGO_RED_BLINK:   u8 = 2 << 6;             // slow blink red only
 const LOGO_AMBER_BLINK: u8 = (2 << 6) | (2 << 4); // slow blink red+green = amber
 
@@ -162,11 +162,11 @@ pub async fn monitor_estop(led_tx: LedTx, mode_tx: ChademoTx) {
     use crate::chademo::state::{CHADEMO, ESTOPPIN};
     let pin = Pin::new(ESTOPPIN);
     if let Err(e) = pin.export() {
-        log::warn!("[ESTOP] Could not export GPIO{ESTOPPIN}: {e:?} — E-Stop monitoring inactive");
+        log::warn!("[ESTOP] Could not export GPIO{ESTOPPIN}: {e:?} -- E-Stop monitoring inactive");
         return;
     }
     if pin.set_direction(Direction::In).is_err() || pin.set_edge(Edge::BothEdges).is_err() {
-        log::warn!("[ESTOP] Could not configure GPIO{ESTOPPIN} — E-Stop monitoring inactive");
+        log::warn!("[ESTOP] Could not configure GPIO{ESTOPPIN} -- E-Stop monitoring inactive");
         return;
     }
     let mut stream = match pin.get_value_stream() {
@@ -181,7 +181,7 @@ pub async fn monitor_estop(led_tx: LedTx, mode_tx: ChademoTx) {
         match evt {
             Ok(0) => {
                 // HIGH -> LOW: E-Stop pressed and latched
-                log::error!("[ESTOP] *** E-STOP PRESSED — sending Quit ***");
+                log::error!("[ESTOP] *** E-STOP PRESSED -- sending Quit ***");
                 let _ = led_tx.send(LedCommand::Logo(State::Initialising)).await;
                 let _ = mode_tx.send(OperationMode::Quit).await;
             }
@@ -370,11 +370,11 @@ where
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum State {
-    Initialising, // slow blink red — startup before ready
-    MeterStale,   // slow blink amber — meter data lost
-    Error,        // solid red — CAN fault or EV fault
+    Initialising, // slow blink red -- startup before ready
+    MeterStale,   // slow blink amber -- meter data lost
+    Error,        // solid red -- CAN fault or EV fault
     Idle,         // solid white
-    Charging,     // solid blue — Charge or Discharge
+    Charging,     // solid blue -- Charge or Discharge
     V2h,          // solid green
     Off,          // dark
 }

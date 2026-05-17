@@ -105,7 +105,7 @@ pub struct Database {
 impl Database {
     pub async fn new() -> Result<Self, IndraError> {
         let create_tables = if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
-            log::info!("Creating new database at | {}", DB_URL);        // ← Changed to log::info!
+            log::info!("Creating new database at | {}", DB_URL);        // <- Changed to log::info!
             Sqlite::create_database(DB_URL)
                 .await
                 .map_err(|_e| IndraError::Error)?;

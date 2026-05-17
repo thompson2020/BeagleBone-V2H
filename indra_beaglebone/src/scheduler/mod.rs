@@ -210,7 +210,7 @@ async fn process_events(events: Events, mode_tx: ChademoTx) {
             } 
             else {
                 log::debug!("No future events left today");
-                break;        // ← This is the important line
+                break;        // <- This is the important line
             }
             log::info!("SCHEDULER: check next event");
 

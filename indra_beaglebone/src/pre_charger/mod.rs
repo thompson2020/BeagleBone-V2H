@@ -61,7 +61,7 @@ impl std::fmt::Display for PreCharger {
         };
         write!(
             f,
-            "PRE: {sign} {:.2}W, temp: {:.2}ªC dc_output: {:.2}V {:.2}A, dc_output_setpoint: {:.2}V {:.2}A, fan: {} enabled: {}",
+            "PRE: {sign} {:.2}W, temp: {:.2}degC dc_output: {:.2}V {:.2}A, dc_output_setpoint: {:.2}V {:.2}A, fan: {} enabled: {}",
             self.dc_output_amps * self.dc_output_volts,
             self.temp,
             self.dc_output_volts,
@@ -125,7 +125,7 @@ impl PreCharger {
 
         match addr {
             0x2104 => self.temp = val_i16 as f32 * 0.1,
-            // 0x2105 => self.ac_volts = val_u16 as f32 * 0.1, // PRE has no AC V sensor — sourced from meter instead
+            // 0x2105 => self.ac_volts = val_u16 as f32 * 0.1, // PRE has no AC V sensor -- sourced from meter instead
             0x2106 => self.ac_amps = val_i16 as f32 * 0.1,
             0x2107 => self.dc_output_volts = val_u16 as f32 * 0.1,
             0x2108 => self.dc_output_amps = val_i16 as f32 * 0.1,
@@ -320,7 +320,7 @@ pub fn cmd_list_setpoints() -> [u16; 5] {
 pub fn cmd_list_outputs() -> [u16; 5] {
     [
         u16::from(Register::Temp),
-        // AcV (0x2105) omitted — module has no AC voltage sensor, always returns 0
+        // AcV (0x2105) omitted -- module has no AC voltage sensor, always returns 0
         u16::from(Register::AcA),
         u16::from(Register::DcOutputV),
         u16::from(Register::DcOutputA),

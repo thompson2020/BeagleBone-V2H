@@ -11,23 +11,23 @@ use sysfs_gpio::Pin;
 /// Signals on the CHAdeMO connector itself (as defined in CHAdeMO 2.0 / IEC 61851-23).
 #[derive(Serialize, Debug)]
 pub struct ChademoConnectorGpio {
-    pub k_line:          u8, // Charge sequence signal (input — low = EV requests sequence)
-    pub d1_ev_contactor: u8, // D1: +HV EV-side relay (output — high = commanded closed)
-    pub d2_ev_contactor: u8, // D2: -HV EV-side relay (output — high = commanded closed)
-    pub plug_lock:       u8, // Plug-lock solenoid (output — high = locked)
+    pub k_line:          u8, // Charge sequence signal (input -- low = EV requests sequence)
+    pub d1_ev_contactor: u8, // D1: +HV EV-side relay (output -- high = commanded closed)
+    pub d2_ev_contactor: u8, // D2: -HV EV-side relay (output -- high = commanded closed)
+    pub plug_lock:       u8, // Plug-lock solenoid (output -- high = locked)
 }
 
-/// EVSE internal I/O — buttons, safety, and power-path contactors.
+/// EVSE internal I/O -- buttons, safety, and power-path contactors.
 #[derive(Serialize, Debug)]
 pub struct EvseGpio {
-    pub estop:            u8, // Emergency stop (input — low = active/pressed)
-    pub on_off_button:    u8, // Front-panel On/Off (input — low = pressed)
-    pub boost_button:     u8, // Front-panel Boost (input — low = pressed)
+    pub estop:            u8, // Emergency stop (input -- low = active/pressed)
+    pub on_off_button:    u8, // Front-panel On/Off (input -- low = pressed)
+    pub boost_button:     u8, // Front-panel Boost (input -- low = pressed)
     pub c1_contactor:     u8, // C1 AC contactor (output)
     pub c2_contactor:     u8, // C2 AC contactor (output)
     pub pre_ac:           u8, // PRE AC input contactor (output)
     pub master_contactor: u8, // Master DC contactor (output)
-    pub pca_reset:        u8, // PCA9552 LED driver reset (output — init high)
+    pub pca_reset:        u8, // PCA9552 LED driver reset (output -- init high)
 }
 
 #[derive(Serialize, Debug)]
@@ -41,13 +41,13 @@ pub struct ChademoSnapshot {
     pub state:        OperationMode,
     pub soc:          u8,
     pub current_amps: i16,
-    // EV → EVSE (received from vehicle)
+    // EV -> EVSE (received from vehicle)
     pub x100: X100,
     pub x101: X101,
     pub x102: X102,
     pub x200: X200,
     pub x201: X201,
-    // EVSE → EV (sent to vehicle)
+    // EVSE -> EV (sent to vehicle)
     pub x108: X108,
     pub x109: X109,
     pub x208: X208,

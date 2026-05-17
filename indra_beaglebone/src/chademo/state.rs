@@ -19,11 +19,11 @@ pub const C2PIN: u64 = PinVal::GPIO_P8_32 as u64; // internal contactor
 pub const KPIN: u64 = PinVal::GPIO_P9_16 as u64; // input - charge signal sense
 pub(crate) const ONOFFPIN: u64 = PinVal::GPIO_P9_23 as u64; // input - front panel, low = pressed
 pub(crate) const BOOSTPIN: u64 = PinVal::GPIO_P9_25 as u64; // input - front panel, low = pressed
-pub(crate) const RESETPCAPIN: u64 = PinVal::GPIO_P8_31 as u64; // output — PCA9552 LED driver reset, init high
+pub(crate) const RESETPCAPIN: u64 = PinVal::GPIO_P8_31 as u64; // output -- PCA9552 LED driver reset, init high
 pub const PLUG_LOCK: u64 = PinVal::GPIO_P8_16 as u64; // Solenoid in CHAdeMO plug
 pub(crate) const MASTERCONTACTOR: u64 = PinVal::GPIO_P8_12 as u64; // lockout
 pub(crate) const PREACPIN: u64 = PinVal::GPIO_P8_28 as u64; // AC contactor in charger
-pub(crate) const ESTOPPIN: u64 = PinVal::GPIO_P8_11 as u64; // E-Stop input — confirmed GPIO45/P8_11
+pub(crate) const ESTOPPIN: u64 = PinVal::GPIO_P8_11 as u64; // E-Stop input -- confirmed GPIO45/P8_11
 
 #[derive(Copy, Clone, Debug)]
 pub struct Pins {

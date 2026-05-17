@@ -48,17 +48,17 @@
       entity_id: sensor.agile_export_current_day_rates
   sensor:
     - name: "agile_export_current_rate"
-      unit_of_measurement: "p/kWh"
+      unit_of_measurement: "GBP/kWh"
       state: >
         {% set rates = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
         {% set now_ts = now().timestamp() %}
         {% set ns = namespace(rate=none) %}
         {% for r in rates %}
           {% if as_timestamp(r.start) <= now_ts < as_timestamp(r.end) %}
-            {% set ns.rate = r.value_inc_vat * 100 %}
+            {% set ns.rate = r.value_inc_vat %}
           {% endif %}
         {% endfor %}
-        {{ ns.rate | round(2) if ns.rate is not none else 0 }}
+        {{ ns.rate | round(4) if ns.rate is not none else 0 }}
       attributes:
         rate_end: >
           {% set rates = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}

@@ -13,7 +13,7 @@ pub enum OperationMode {
     Uninitalised,
     /// Shutdown all peripherals and safetly unlock plug
     Quit,
-    /// Forced discharge mode — uses v2h_max_amps / v2h_soc_min from OperatorSettings
+    /// Forced discharge mode -- uses v2h_max_amps / v2h_soc_min from OperatorSettings
     Discharge,
 }
 

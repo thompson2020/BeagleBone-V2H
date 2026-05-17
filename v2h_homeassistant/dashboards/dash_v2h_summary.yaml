@@ -145,53 +145,166 @@ views:
                         [[[ return states['sensor.v2h_operation_mode'].state ===
                         'Charge'
                             ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
-          - type: custom:bar-card
-            title: null
-            entities:
-              - entity: sensor.v2h_soc
-                name: Battery
-                icon: mdi:none
-                min: 0
-                max: 100
-                severity:
-                  - from: 0
-                    to: 20
-                    color: var(--red-color)
-                  - from: 20
-                    to: 50
-                    color: var(--orange-color)
-                  - from: 50
-                    to: 90
-                    color: var(--green-color)
-                  - from: 90
-                    to: 100
-                    color: var(--green-color)
-            direction: right
-            height: 28px
-            animation:
-              state: 'off'
-            positions:
-              icon: 'off'
-              indicator: inside
-              name: outside
-              value: inside
-            rounded: true
+          - type: custom:gauge-card-pro
+            entity: sensor.v2h_soc
+            min: 0
+            max: 100
+            needle: true
             card_mod:
               style: |
                 ha-card {
-                  border-radius: 18px;
-                  padding: 12px;
+                  position: relative;
                 }
 
-                bar-card-currentbar {
-                  border-radius: 12px;
+                /* Top-left title */
+                ha-card::before {
+                  content: "SoC";
+                  position: absolute;
+                  top: 8px;
+                  left: 10px;
+                  font-size: 13px;
+                  font-weight: 500;
+                  color: var(--primary-text-color);
                 }
+
+                /* Top-right small metrics */
+                ha-card::after {
+                  content: "{{ states('sensor.v2h_pre_temperature') | float | round(1) }}°C  |  {{ states('sensor.v2h_pre_fan_duty') | float | round(0) }}%";
+                  position: absolute;
+                  top: 8px;
+                  right: 10px;
+                  font-size: 11px;
+                  color: var(--secondary-text-color);
+                }
+            segments:
+              - from: 0
+                color: '#ef4444'
+              - from: 20
+                color: '#f59e0b'
+              - from: 80
+                color: '#22c55e'
+            inner:
+              mode: 'off'
+            titles:
+              primary:
+                value: ''
+            value_texts:
+              primary:
+                value: '{{ states(''sensor.v2h_soc'') | float | round(0) }}'
+                unit_of_measurement: '%'
+            grid_options:
+              columns: 12
+          - type: custom:gauge-card-pro
+            entity: sensor.v2h_grid_power
+            entity2: sensor.v2h_grid_phase_power
+            min: -6000
+            max: 6000
+            needle: true
+            card_mod:
+              style: |
+
+                ha-card {
+                  position: relative;
+                }
+
+                ha-card::before {
+                  content: "Exporting";
+                  position: absolute;
+                  left: 8px;
+                  bottom: 28px;
+                  font-size: 12px;
+                  color: var(--blue-color);
+                }
+
+                ha-card::after {
+                  content: "Importing";
+                  position: absolute;
+                  right: 8px;
+                  bottom: 28px;
+                  font-size: 12px;
+                  color: var(--red-color);
+                }
+
+
+                ha-card::marker {
+                }
+                ha-card > div::before {
+                  content: "Grid W";
+                  position: absolute;
+                  top: 8px;
+                  left: 10px;
+                  font-size: 13px;
+                  font-weight: 500;
+                  color: var(--primary-text-color);
+                }
+                 
+            segments:
+              - from: -6000
+                color: var(--blue-color)
+              - from: -250
+                color: var(--green-color)
+              - from: 250
+                color: var(--red-color)
+              - from: 6000
+                color: var(--red-color)
+            inner:
+              mode: on_main
+              needle_color: var(--black-color)
+            titles:
+              primary:
+                value: null
+            value_texts:
+              primary:
+                value: '{{ states(''sensor.v2h_grid_power'') | float | round(0) }}'
+                unit_of_measurement: W
+              secondary:
+                value: '{{ states(''sensor.v2h_grid_phase_power'') | float | round(0) }}'
+                color: var(--info-color)
+                unit_of_measurement: W(Phase)
+            grid_options:
+              columns: 12
+              rows: auto
           - type: custom:gauge-card-pro
             entity: sensor.v2h_ac_power
             entity2: sensor.v2h_dc_power
             min: -6000
             max: 6000
             needle: true
+            card_mod:
+              style: |
+                ha-card {
+                  position: relative;
+                }
+
+                ha-card::before {
+                  content: "Discharging";
+                  position: absolute;
+                  left: 8px;
+                  bottom: 28px;  /* ↑ move up to sit near scale */
+                  font-size: 12px;
+                  color: var(--red-color);
+                }
+
+                ha-card::after {
+                  content: "Charging";
+                  position: absolute;
+                  right: 8px;
+                  bottom: 28px;  /* same height as left */
+                  font-size: 12px;
+                  color: var(--green-color);
+                }
+
+                    ha-card::marker {
+                }
+                ha-card > div::before {
+                  content: "Battery";
+                  position: absolute;
+                  top: 0px;
+                  left: 0px;
+                  font-size: 13px;
+                  font-weight: 500;
+                  color: var(--primary-text-color);
+                }
             segments:
               - from: -6000
                 color: var(--red-color)
@@ -203,10 +316,10 @@ views:
                 color: var(--green-color)
             inner:
               mode: on_main
-              needle_color: var(--info-color)
+              needle_color: var(--black-color)
             titles:
               primary:
-                value: V2H Power
+                value: null
             value_texts:
               primary:
                 value: '{{ states(''sensor.v2h_ac_power'') | float | round(0) }}'
@@ -218,127 +331,38 @@ views:
             grid_options:
               columns: 12
               rows: auto
-          - type: custom:gauge-card-pro
-            entity: sensor.v2h_grid_power
-            entity2: sensor.v2h_grid_phase_power
-            min: -6000
-            max: 6000
+          - type: gauge
+            unit: '%'
+            min: 0
+            max: 100
             needle: true
+            card_mod:
+              style: |
+                ha-card {
+                  position: relative;
+                }
+
+                ha-card::before {
+                  content: "Eff";
+                  position: absolute;
+                  top: 8px;
+                  left: 10px;
+                  font-size: 13px;
+                  font-weight: 500;
+                  color: var(--primary-text-color);
+                }
             segments:
-              - from: -6000
-                color: var(--red-color)
               - from: 0
-                color: var(--red-color)
-              - from: 0
-                color: var(--green-color)
-              - from: 6000
-                color: var(--green-color)
-            inner:
-              mode: on_main
-              needle_color: var(--info-color)
-            titles:
-              primary:
-                value: Grid Power
-            value_texts:
-              primary:
-                value: '{{ states(''sensor.v2h_grid_power'') | float | round(0) }}'
-                unit_of_measurement: W Total
-              secondary:
-                value: '{{ states(''sensor.v2h_grid_phase_power'') | float | round(0) }}'
-                color: var(--info-color)
-                unit_of_measurement: W Phase
-            grid_options:
-              columns: 12
-              rows: auto
-          - type: custom:bar-card
-            title: null
-            entities:
-              - entity: sensor.v2h_efficiency
-                name: EFF
-                icon: mdi:none
-                min: 0
-                max: 100
-                severity:
-                  - from: 0
-                    to: 70
-                    color: var(--red-color)
-                  - from: 70
-                    to: 90
-                    color: var(--orange-color)
-                  - from: 90
-                    to: 100
-                    color: var(--green-color)
-            direction: right
-            height: 28px
-            animation:
-              state: 'off'
-            positions:
-              icon: 'off'
-              indicator: inside
-              name: outside
-              value: inside
-            rounded: true
-            card_mod:
-              style: |
-                ha-card {
-                  border-radius: 18px;
-                  padding: 12px;
-                }
+                color: '#ef4444'
+              - from: 70
+                color: '#f59e0b'
+              - from: 90
+                color: '#22c55e'
+            entity: sensor.v2h_efficiency
             grid_options:
               columns: 6
-              rows: auto
-          - type: custom:bar-card
-            title: null
-            entities:
-              - entity: sensor.v2h_pre_temperature
-                name: PRE
-                icon: mdi:none
-                min: 0
-                max: 80
-                severity:
-                  - from: 0
-                    to: 30
-                    color: var(--green-color)
-                  - from: 30
-                    to: 50
-                    color: var(--orange-color)
-                  - from: 50
-                    to: 80
-                    color: var(--red-color)
-              - entity: sensor.v2h_pre_fan_duty
-                name: PRE
-                icon: mdi:none
-                min: 0
-                max: 100
-                severity:
-                  - from: 0
-                    to: 40
-                    color: var(--green-color)
-                  - from: 40
-                    to: 75
-                    color: var(--orange-color)
-                  - from: 75
-                    to: 100
-                    color: var(--red-color)
-            direction: right
-            height: 28px
-            animation:
-              state: 'off'
-            positions:
-              icon: 'off'
-              indicator: inside
-              name: outside
-              value: inside
-            rounded: true
-            card_mod:
-              style: |
-                ha-card {
-                  border-radius: 18px;
-                  padding: 12px;
-                }
-            grid_options:
-              columns: 6
-              rows: auto
+              rows: 1.5
+            name: ''
       - type: grid
         cards:
           - type: custom:expander-card
@@ -368,12 +392,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -413,12 +431,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -461,12 +473,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -485,12 +491,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -555,12 +555,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -650,12 +644,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -674,12 +662,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -736,18 +718,12 @@ views:
             cards:
               - type: custom:button-card
                 entity: switch.v2h_smart_export_solar
-                name: Export Solar
+                name: Smart Export Solar
                 icon: mdi:solar-power-variant
                 tap_action:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -766,12 +742,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -819,12 +789,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -911,12 +875,6 @@ views:
                   action: toggle
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(96,165,250,0.2)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #60a5fa' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -935,12 +893,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -1042,13 +994,10 @@ views:
               rows: auto
       - type: grid
         cards:
-          - type: heading
-            heading: Charger
-            heading_style: title
           - type: custom:apexcharts-card
             header:
               show: true
-              title: Charger
+              title: Charger 2h
             graph_span: 2h
             yaxis:
               - min: -6000
@@ -1085,20 +1034,17 @@ views:
                 type: line
             grid_options:
               columns: 12
-          - type: heading
-            heading: Grid
-            heading_style: title
           - type: custom:apexcharts-card
             header:
               show: true
-              title: Grid
+              title: Grid 2h
             graph_span: 2h
             span:
               end: minute
             yaxis:
               - id: power
-                min: -10000
-                max: 10000
+                min: -6000
+                max: 6000
                 decimals: 0
                 apex_config:
                   tickAmount: 8
@@ -1145,3 +1091,131 @@ views:
                   duration: 1min
             grid_options:
               columns: 12
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+          - type: custom:gauge-card-pro
+            entity: sensor.v2h_ac_power
+            entity2: sensor.v2h_dc_power
+            min: -6000
+            max: 6000
+            needle: true
+            needle_color: '#000000'
+            segments:
+              - from: -6000
+                color: var(--blue-color)
+              - from: -250
+                color: var(--green-color)
+              - from: 250
+                color: var(--red-color)
+              - from: 6000
+                color: var(--red-color)
+            gradient: false
+            gradient_background: false
+            gradient_resolution: auto
+            inner:
+              min: -6000
+              max: 6000
+              mode: on_main
+              needle_color: var(--green-color)
+              segments:
+                - from: -6000
+                  color: var(--blue-color)
+                - from: -250
+                  color: var(--green-color)
+                - from: 250
+                  color: var(--red-color)
+                - from: 6000
+                  color: var(--red-color)
+              gradient: false
+              gradient_background: false
+              gradient_resolution: auto
+              round: 'off'
+            marker: false
+            round: 'off'
+            titles:
+              primary:
+                value: ''
+              secondary:
+                value: ''
+            value_texts:
+              primary:
+                value: '{{ states(''sensor.v2h_ac_power'') | float | round(0) }}'
+                color: var(--black-color)
+                unit_of_measurement: W
+                unit_before_value: false
+              secondary:
+                value: '{{ states(''sensor.v2h_dc_power'') | float | round(0) }}'
+                color: var(--black-color)
+                unit_of_measurement: W (DC)
+                unit_before_value: false
+            min_indicator:
+              type: entity
+              value: sensor.v2h_dc_power
+              color: '#aaa'
+              label: true
+              label_color: var(--black-color)
+              precision: 0
+            max_indicator:
+              type: entity
+              value: sensor.v2h_ac_power
+              color: '#aaa'
+              label: true
+              label_color: var(--black-color)
+              precision: 0
+            setpoint:
+              type: entity
+              value: sensor.v2h_efficiency
+              color: '#aaa'
+              label: true
+              label_color: var(--black-color)
+              precision: 0
+            tap_action:
+              action: more-info
+              entity: sensor.v2h_ac_power
+            hold_action:
+              action: more-info
+            double_tap_action:
+              action: more-info
+            card_mod:
+              style: |
+                ha-card {
+                  position: relative;
+                }
+
+                ha-card::before {
+                  content: "Exporting";
+                  position: absolute;
+                  left: 8px;
+                  bottom: 28px;
+                  font-size: 12px;
+                  color: var(--blue-color);
+                }
+
+                ha-card::after {
+                  content: "Importing";
+                  position: absolute;
+                  right: 8px;
+                  bottom: 28px;
+                  font-size: 12px;
+                  color: var(--red-color);
+                }
+
+                ha-card > div::before {
+                  content: "V2H Power";
+                  position: absolute;
+                  top: 8px;
+                  left: 10px;
+                  font-size: 13px;
+                  font-weight: 500;
+                  color: var(--primary-text-color);
+                }
+
+                * {
+                  --main-needle-stroke-width: 1px;
+                  --main-needle-stroke-color: white;
+                }
+            grid_options:
+              columns: 12
+              rows: auto

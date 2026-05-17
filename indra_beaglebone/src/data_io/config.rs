@@ -52,7 +52,7 @@ pub struct MqttConfig {
     //pub mqtt_meter_phase_power_topic: String,
     //pub mqtt_meter_phase_power_field: String,
     //pub mqtt_meter_phase_power_scale: f32,
-    pub mqtt_timeout_seconds: u64,         // ← our 120 second timeout for mqtt meter readings, added to config.toml
+    pub mqtt_timeout_seconds: u64,         // <- our 120 second timeout for mqtt meter readings, added to config.toml
 
 
 }

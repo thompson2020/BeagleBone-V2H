@@ -24,18 +24,20 @@ pub fn subscribe() -> Option<broadcast::Receiver<LogEntry>> {
 pub fn init(level: LevelFilter) -> Result<(), SetLoggerError> {
     let (tx, _) = broadcast::channel(512);
     let _ = BROADCAST.set(tx);
-    log::set_boxed_logger(Box::new(IndraLogger { level }))?;
+    log::set_boxed_logger(Box::new(IndraLogger))?;
     log::set_max_level(level);
     Ok(())
 }
 
-struct IndraLogger {
-    level: LevelFilter,
+pub fn set_level(level: LevelFilter) {
+    log::set_max_level(level);
 }
+
+struct IndraLogger;
 
 impl Log for IndraLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.level
+        metadata.level() <= log::max_level()
     }
 
     fn log(&self, record: &Record) {

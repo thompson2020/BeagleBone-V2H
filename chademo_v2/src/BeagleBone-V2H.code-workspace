@@ -2,9 +2,6 @@
 	"folders": [
 		{
 			"path": "../.."
-		},
-		{
-			"path": "../../../v2h_webui"
 		}
 	],
 	"settings": {}

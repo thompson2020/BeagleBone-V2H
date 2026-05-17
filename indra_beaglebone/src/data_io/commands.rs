@@ -21,6 +21,7 @@ pub enum Cmd {
     GetRecords(Parameters),
     StartLogs,
     StopLogs,
+    SetLogLevel(String),
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -36,7 +37,7 @@ pub struct Instruction {
 pub async fn dispatch(cmd: Cmd, mode_tx: &ChademoTx) -> bool {
     match cmd {
         Cmd::SetMode(mode) => {
-            log::info!("Command: SetMode → {mode:?}");
+            log::info!("Command: SetMode -> {mode:?}");
             if let Err(e) = mode_tx.send(mode).await {
                 log::error!("Command: SetMode channel | {e}");
             }
@@ -50,6 +51,23 @@ pub async fn dispatch(cmd: Cmd, mode_tx: &ChademoTx) -> bool {
         Cmd::SetSetting(patch) => {
             log::info!("Command: SetSetting");
             patch_setting(patch).await;
+            true
+        }
+        Cmd::SetLogLevel(level_str) => {
+            let level = match level_str.to_lowercase().as_str() {
+                "trace" => log::LevelFilter::Trace,
+                "debug" => log::LevelFilter::Debug,
+                "info"  => log::LevelFilter::Info,
+                "warn"  => log::LevelFilter::Warn,
+                "error" => log::LevelFilter::Error,
+                "off"   => log::LevelFilter::Off,
+                _ => {
+                    log::warn!("SetLogLevel: unknown level '{level_str}'");
+                    return false;
+                }
+            };
+            crate::logger::set_level(level);
+            log::info!("Log level set to {level}");
             true
         }
         _ => false,

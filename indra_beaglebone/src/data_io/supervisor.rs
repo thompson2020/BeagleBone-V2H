@@ -7,40 +7,40 @@ use tokio::time::{sleep, Duration};
 
 /// All supervisory signals in one place.
 ///
-/// `_request`  — the raw incoming signal (from MQTT or internal calculation).
-/// `_active`   — set by the supervisor task when it decides to act on a request.
+/// `_request`  -- the raw incoming signal (from MQTT or internal calculation).
+/// `_active`   -- set by the supervisor task when it decides to act on a request.
 ///               `ev_connect.rs` reads only `_active` flags and never evaluates conditions itself.
 #[derive(Clone, Copy, Default, Debug, serde::Serialize)]
 pub struct SupervisoryState {
-    // Smart Charge — source: MQTT from HA (Octopus IOG cheap slot)
+    // Smart Charge -- source: MQTT from HA (Octopus IOG cheap slot)
     pub smart_charge_request: bool,
     pub smart_charge_active: bool,
     #[serde(skip)]
     pub smart_charge_request_update: Option<Instant>,
 
-    // EV Drain Protection — source: MQTT from HA
+    // EV Drain Protection -- source: MQTT from HA
     pub ev_drain_protection_request: bool,
     pub ev_drain_protection_active: bool,
     #[serde(skip)]
     pub ev_drain_protection_request_update: Option<Instant>,
 
-    // Smart Export — source: MQTT from HA (favourable export price)
+    // Smart Export -- source: MQTT from HA (favourable export price)
     pub smart_export_request: bool,
     pub smart_export_active: bool,
     #[serde(skip)]
     pub smart_export_request_update: Option<Instant>,
 
-    // Smart Export Excess Solar — source: MQTT from HA (export rate > overnight import rate)
+    // Smart Export Excess Solar -- source: MQTT from HA (export rate > overnight import rate)
     pub smart_export_excess_solar_request: bool,
     pub smart_export_excess_solar_active: bool,
     #[serde(skip)]
     pub smart_export_excess_solar_request_update: Option<Instant>,
 
-    // Ready to Drive — source: internal (clock within calculated start → ready_to_drive_end_time+2h)
+    // Ready to Drive -- source: internal (clock within calculated start -> ready_to_drive_end_time+2h)
     pub ready_to_drive_request: bool,
     pub ready_to_drive_active: bool,
 
-    // Off-Peak Charging — source: internal (clock within off_peak_start..off_peak_end window)
+    // Off-Peak Charging -- source: internal (clock within off_peak_start..off_peak_end window)
     pub off_peak_charging_request: bool,
     pub off_peak_charging_active: bool,
 }
@@ -77,7 +77,7 @@ lazy_static! {
         Arc::new(RwLock::new(SupervisoryState::default()));
 }
 
-/// The supervisor task — runs every second and decides which `_active` flags should be set.
+/// The supervisor task -- runs every second and decides which `_active` flags should be set.
 ///
 /// This is the single place that answers "should X be happening right now?"
 /// It reads `_request` flags, `OPERATOR_SETTINGS`, and current charger state,
@@ -86,7 +86,7 @@ pub async fn supervisor_task() {
     log::info!("Starting thread: supervisor  | {}", tokio::task::id());
     loop {
         sleep(Duration::from_secs(1)).await;
-        evaluate_ready_to_drive().await;     // highest priority — must run first
+        evaluate_ready_to_drive().await;     // highest priority -- must run first
         evaluate_off_peak_charging().await;
         evaluate_smart_export().await;
         evaluate_smart_export_excess_solar().await;
@@ -98,10 +98,10 @@ pub async fn supervisor_task() {
 /// Decides whether smart charge should be active this second.
 ///
 /// Conditions (all must be true):
-///   1. `smart_charge_request`          — HA says a cheap slot is active
-///   2. `OPERATOR_SETTINGS.smart_charge` — operator has enabled the feature in the UI
-///   3. Current mode is V2h             — only meaningful when the EV is in V2H mode
-///   4. Current SoC < charge_soc_limit  — don't charge if already at the target
+///   1. `smart_charge_request`          -- HA says a cheap slot is active
+///   2. `OPERATOR_SETTINGS.smart_charge` -- operator has enabled the feature in the UI
+///   3. Current mode is V2h             -- only meaningful when the EV is in V2H mode
+///   4. Current SoC < charge_soc_limit  -- don't charge if already at the target
 async fn evaluate_smart_charge() {
     use crate::data_io::operator_settings::OPERATOR_SETTINGS;
     use crate::global_state::OperationMode;
@@ -109,7 +109,7 @@ async fn evaluate_smart_charge() {
     if SUPERVISORY.read().await.ready_to_drive_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (ready_to_drive_active)");
+            log::info!("Supervisor: smart_charge_active -> false (ready_to_drive_active)");
             sup.smart_charge_active = false;
         }
         return;
@@ -118,7 +118,7 @@ async fn evaluate_smart_charge() {
     if SUPERVISORY.read().await.off_peak_charging_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (off_peak_charging_active)");
+            log::info!("Supervisor: smart_charge_active -> false (off_peak_charging_active)");
             sup.smart_charge_active = false;
         }
         return;
@@ -126,11 +126,11 @@ async fn evaluate_smart_charge() {
 
     let request = SUPERVISORY.read().await.smart_charge_request;
 
-    // Short-circuit: no request → clear active and return without reading other globals
+    // Short-circuit: no request -> clear active and return without reading other globals
     if !request {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (no request)");
+            log::info!("Supervisor: smart_charge_active -> false (no request)");
             sup.smart_charge_active = false;
         }
         return;
@@ -141,7 +141,7 @@ async fn evaluate_smart_charge() {
         drop(settings);
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (disabled in settings)");
+            log::info!("Supervisor: smart_charge_active -> false (disabled in settings)");
             sup.smart_charge_active = false;
         }
         return;
@@ -155,13 +155,13 @@ async fn evaluate_smart_charge() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: smart_charge_active -> false (not in V2h, mode: {:?})", mode);
             sup.smart_charge_active = false;
         }
         return;
     }
 
-    // Export takes priority — do not charge during an active export slot.
+    // Export takes priority -- do not charge during an active export slot.
     // smart_export_excess_solar does not block smart_charge (no round-trip loss conflict).
     let sup_snap = SUPERVISORY.read().await;
     let export_blocked = sup_snap.smart_export_active;
@@ -169,18 +169,18 @@ async fn evaluate_smart_charge() {
     if export_blocked {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_charge_active {
-            log::info!("Supervisor: smart_charge_active → false (smart_export active)");
+            log::info!("Supervisor: smart_charge_active -> false (smart_export active)");
             sup.smart_charge_active = false;
         }
         return;
     }
 
-    // All conditions met — activate and stay active for the whole slot.
+    // All conditions met -- activate and stay active for the whole slot.
     // ev_connect reads soc_limit itself and returns 0A when the limit is reached,
     // so we do not clear active here when SoC is high.
     let mut sup = SUPERVISORY.write().await;
     if !sup.smart_charge_active {
-        log::info!("Supervisor: smart_charge_active → true");
+        log::info!("Supervisor: smart_charge_active -> true");
         sup.smart_charge_active = true;
     }
 }
@@ -188,11 +188,11 @@ async fn evaluate_smart_charge() {
 /// Decides whether smart export (discharge) should be active this second.
 ///
 /// Conditions (all must be true):
-///   1. `smart_export_request`          — HA says a favourable export slot is active
-///   2. `OPERATOR_SETTINGS.smart_export` — operator has enabled the feature in the UI
+///   1. `smart_export_request`          -- HA says a favourable export slot is active
+///   2. `OPERATOR_SETTINGS.smart_export` -- operator has enabled the feature in the UI
 ///   3. Current mode is V2h
 ///
-/// SoC vs v2h_soc_min is not checked here — ev_connect holds at 0A when the floor
+/// SoC vs v2h_soc_min is not checked here -- ev_connect holds at 0A when the floor
 /// is reached, keeping the session alive for the rest of the slot.
 async fn evaluate_smart_export() {
     use crate::data_io::operator_settings::OPERATOR_SETTINGS;
@@ -201,7 +201,7 @@ async fn evaluate_smart_export() {
     if SUPERVISORY.read().await.ready_to_drive_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_active {
-            log::info!("Supervisor: smart_export_active → false (ready_to_drive_active)");
+            log::info!("Supervisor: smart_export_active -> false (ready_to_drive_active)");
             sup.smart_export_active = false;
         }
         return;
@@ -210,7 +210,7 @@ async fn evaluate_smart_export() {
     if SUPERVISORY.read().await.off_peak_charging_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_active {
-            log::info!("Supervisor: smart_export_active → false (off_peak_charging_active)");
+            log::info!("Supervisor: smart_export_active -> false (off_peak_charging_active)");
             sup.smart_export_active = false;
         }
         return;
@@ -221,7 +221,7 @@ async fn evaluate_smart_export() {
     if !request {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_active {
-            log::info!("Supervisor: smart_export_active → false (no request)");
+            log::info!("Supervisor: smart_export_active -> false (no request)");
             sup.smart_export_active = false;
         }
         return;
@@ -232,7 +232,7 @@ async fn evaluate_smart_export() {
         drop(settings);
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_active {
-            log::info!("Supervisor: smart_export_active → false (disabled in settings)");
+            log::info!("Supervisor: smart_export_active -> false (disabled in settings)");
             sup.smart_export_active = false;
         }
         return;
@@ -246,7 +246,7 @@ async fn evaluate_smart_export() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_active {
-            log::info!("Supervisor: smart_export_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: smart_export_active -> false (not in V2h, mode: {:?})", mode);
             sup.smart_export_active = false;
         }
         return;
@@ -254,7 +254,7 @@ async fn evaluate_smart_export() {
 
     let mut sup = SUPERVISORY.write().await;
     if !sup.smart_export_active {
-        log::info!("Supervisor: smart_export_active → true");
+        log::info!("Supervisor: smart_export_active -> true");
         sup.smart_export_active = true;
     }
 }
@@ -265,8 +265,8 @@ async fn evaluate_smart_export() {
 /// Priority: below smart_export, above smart_charge and ev_drain_protection.
 ///
 /// Conditions (all must be true):
-///   1. `smart_export_excess_solar_request`           — HA says excess solar export is favourable
-///   2. `OPERATOR_SETTINGS.smart_export_excess_solar` — operator has enabled the feature
+///   1. `smart_export_excess_solar_request`           -- HA says excess solar export is favourable
+///   2. `OPERATOR_SETTINGS.smart_export_excess_solar` -- operator has enabled the feature
 ///   3. Current mode is V2h
 ///   4. `ready_to_drive_active` and `off_peak_charging_active` are both false
 async fn evaluate_smart_export_excess_solar() {
@@ -276,7 +276,7 @@ async fn evaluate_smart_export_excess_solar() {
     if SUPERVISORY.read().await.ready_to_drive_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (ready_to_drive_active)");
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (ready_to_drive_active)");
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -285,7 +285,7 @@ async fn evaluate_smart_export_excess_solar() {
     if SUPERVISORY.read().await.off_peak_charging_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (off_peak_charging_active)");
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (off_peak_charging_active)");
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -294,7 +294,7 @@ async fn evaluate_smart_export_excess_solar() {
     if SUPERVISORY.read().await.smart_export_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (smart_export_active)");
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (smart_export_active)");
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -305,7 +305,7 @@ async fn evaluate_smart_export_excess_solar() {
     if !request {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (no request)");
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (no request)");
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -316,7 +316,7 @@ async fn evaluate_smart_export_excess_solar() {
         drop(settings);
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (disabled in settings)");
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (disabled in settings)");
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -330,7 +330,7 @@ async fn evaluate_smart_export_excess_solar() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.smart_export_excess_solar_active {
-            log::info!("Supervisor: smart_export_excess_solar_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: smart_export_excess_solar_active -> false (not in V2h, mode: {:?})", mode);
             sup.smart_export_excess_solar_active = false;
         }
         return;
@@ -338,20 +338,20 @@ async fn evaluate_smart_export_excess_solar() {
 
     let mut sup = SUPERVISORY.write().await;
     if !sup.smart_export_excess_solar_active {
-        log::info!("Supervisor: smart_export_excess_solar_active → true");
+        log::info!("Supervisor: smart_export_excess_solar_active -> true");
         sup.smart_export_excess_solar_active = true;
     }
 }
 
 /// Decides whether EV drain protection should be active this second.
 ///
-/// Holds the CHAdeMO current setpoint at 0A — neither charging nor discharging.
+/// Holds the CHAdeMO current setpoint at 0A -- neither charging nor discharging.
 /// Only activates when smart export and smart charge are both inactive; those
 /// take priority and this function runs after both so their flags are current.
 ///
 /// Conditions (all must be true):
-///   1. `ev_drain_protection_request`          — HA says drain protection is requested
-///   2. `OPERATOR_SETTINGS.ev_drain_protection` — operator has enabled the feature
+///   1. `ev_drain_protection_request`          -- HA says drain protection is requested
+///   2. `OPERATOR_SETTINGS.ev_drain_protection` -- operator has enabled the feature
 ///   3. Current mode is V2h
 ///   4. `smart_export_active` is false
 ///   5. `smart_charge_active` is false
@@ -362,7 +362,7 @@ async fn evaluate_ev_drain_protection() {
     if SUPERVISORY.read().await.ready_to_drive_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (ready_to_drive_active)");
+            log::info!("Supervisor: ev_drain_protection_active -> false (ready_to_drive_active)");
             sup.ev_drain_protection_active = false;
         }
         return;
@@ -371,7 +371,7 @@ async fn evaluate_ev_drain_protection() {
     if SUPERVISORY.read().await.off_peak_charging_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (off_peak_charging_active)");
+            log::info!("Supervisor: ev_drain_protection_active -> false (off_peak_charging_active)");
             sup.ev_drain_protection_active = false;
         }
         return;
@@ -382,7 +382,7 @@ async fn evaluate_ev_drain_protection() {
     if !request {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (no request)");
+            log::info!("Supervisor: ev_drain_protection_active -> false (no request)");
             sup.ev_drain_protection_active = false;
         }
         return;
@@ -393,7 +393,7 @@ async fn evaluate_ev_drain_protection() {
         drop(settings);
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (disabled in settings)");
+            log::info!("Supervisor: ev_drain_protection_active -> false (disabled in settings)");
             sup.ev_drain_protection_active = false;
         }
         return;
@@ -407,13 +407,13 @@ async fn evaluate_ev_drain_protection() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: ev_drain_protection_active -> false (not in V2h, mode: {:?})", mode);
             sup.ev_drain_protection_active = false;
         }
         return;
     }
 
-    // Yield to higher-priority signals — export and charge are already evaluated this cycle.
+    // Yield to higher-priority signals -- export and charge are already evaluated this cycle.
     // smart_export_excess_solar does not block ev_drain_protection.
     let sup_snap = SUPERVISORY.read().await;
     let blocked = sup_snap.smart_export_active || sup_snap.smart_charge_active;
@@ -422,7 +422,7 @@ async fn evaluate_ev_drain_protection() {
     if blocked {
         let mut sup = SUPERVISORY.write().await;
         if sup.ev_drain_protection_active {
-            log::info!("Supervisor: ev_drain_protection_active → false (smart export/charge active)");
+            log::info!("Supervisor: ev_drain_protection_active -> false (smart export/charge active)");
             sup.ev_drain_protection_active = false;
         }
         return;
@@ -430,16 +430,16 @@ async fn evaluate_ev_drain_protection() {
 
     let mut sup = SUPERVISORY.write().await;
     if !sup.ev_drain_protection_active {
-        log::info!("Supervisor: ev_drain_protection_active → true");
+        log::info!("Supervisor: ev_drain_protection_active -> true");
         sup.ev_drain_protection_active = true;
     }
 }
 
 /// Decides whether off-peak charging should be active this second.
 ///
-/// The request is generated internally from the clock — no external MQTT signal.
+/// The request is generated internally from the clock -- no external MQTT signal.
 /// Parses `off_peak_start` / `off_peak_end` ("HH:MM") from operator settings and
-/// handles windows that cross midnight (e.g. 23:30 → 05:30).
+/// handles windows that cross midnight (e.g. 23:30 -> 05:30).
 ///
 /// Priority: below ready_to_drive, above smart_export and smart_charge.
 ///
@@ -449,7 +449,7 @@ async fn evaluate_ev_drain_protection() {
 ///   3. `OPERATOR_SETTINGS.off_peak_charging` is enabled
 ///   4. Current mode is V2h
 ///
-/// SoC vs charge_soc_limit is not checked here — ev_connect holds at 0A when the
+/// SoC vs charge_soc_limit is not checked here -- ev_connect holds at 0A when the
 /// limit is reached, keeping the session alive for the rest of the window.
 async fn evaluate_off_peak_charging() {
     use crate::data_io::operator_settings::OPERATOR_SETTINGS;
@@ -458,7 +458,7 @@ async fn evaluate_off_peak_charging() {
     if SUPERVISORY.read().await.ready_to_drive_active {
         let mut sup = SUPERVISORY.write().await;
         if sup.off_peak_charging_active {
-            log::info!("Supervisor: off_peak_charging_active → false (ready_to_drive_active)");
+            log::info!("Supervisor: off_peak_charging_active -> false (ready_to_drive_active)");
             sup.off_peak_charging_active = false;
         }
         return;
@@ -480,7 +480,7 @@ async fn evaluate_off_peak_charging() {
     let (start_min, end_min) = match (parse_hhmm(&start_str), parse_hhmm(&end_str)) {
         (Some(s), Some(e)) => (s, e),
         _ => {
-            log::warn!("Supervisor: off_peak_charging — invalid time format ({} / {})", start_str, end_str);
+            log::warn!("Supervisor: off_peak_charging -- invalid time format ({} / {})", start_str, end_str);
             let mut sup = SUPERVISORY.write().await;
             sup.off_peak_charging_request = false;
             sup.off_peak_charging_active = false;
@@ -491,7 +491,7 @@ async fn evaluate_off_peak_charging() {
     let now = chrono::Local::now();
     let current_min = now.hour() * 60 + now.minute();
     let in_window = if start_min > end_min {
-        // Window crosses midnight (e.g. 23:30 → 05:30)
+        // Window crosses midnight (e.g. 23:30 -> 05:30)
         current_min >= start_min || current_min < end_min
     } else {
         current_min >= start_min && current_min < end_min
@@ -501,7 +501,7 @@ async fn evaluate_off_peak_charging() {
     {
         let mut sup = SUPERVISORY.write().await;
         if sup.off_peak_charging_request != in_window {
-            log::info!("Supervisor: off_peak_charging_request → {}", in_window);
+            log::info!("Supervisor: off_peak_charging_request -> {}", in_window);
             sup.off_peak_charging_request = in_window;
         }
     }
@@ -509,7 +509,7 @@ async fn evaluate_off_peak_charging() {
     if !in_window || !enabled {
         let mut sup = SUPERVISORY.write().await;
         if sup.off_peak_charging_active {
-            log::info!("Supervisor: off_peak_charging_active → false ({})",
+            log::info!("Supervisor: off_peak_charging_active -> false ({})",
                 if !in_window { "outside window" } else { "disabled in settings" });
             sup.off_peak_charging_active = false;
         }
@@ -523,7 +523,7 @@ async fn evaluate_off_peak_charging() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.off_peak_charging_active {
-            log::info!("Supervisor: off_peak_charging_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: off_peak_charging_active -> false (not in V2h, mode: {:?})", mode);
             sup.off_peak_charging_active = false;
         }
         return;
@@ -531,7 +531,7 @@ async fn evaluate_off_peak_charging() {
 
     let mut sup = SUPERVISORY.write().await;
     if !sup.off_peak_charging_active {
-        log::info!("Supervisor: off_peak_charging_active → true");
+        log::info!("Supervisor: off_peak_charging_active -> true");
         sup.off_peak_charging_active = true;
     }
 }
@@ -542,7 +542,7 @@ async fn evaluate_off_peak_charging() {
 ///   start = end - ceil(kWh_needed / charge_rate_kw)
 ///
 /// The active window runs from start to end+2h. During the 2h extension after
-/// the end time, SoC is already at target so ev_connect holds at 0A — this
+/// the end time, SoC is already at target so ev_connect holds at 0A -- this
 /// prevents the system reverting to normal V2H while the car is in use.
 ///
 /// When active, all other supervisory modes are suppressed (they check this flag
@@ -569,7 +569,7 @@ async fn evaluate_ready_to_drive() {
     let end_min = match parse_hhmm(&end_str) {
         Some(e) => e,
         None => {
-            log::warn!("Supervisor: ready_to_drive — invalid time format ({})", end_str);
+            log::warn!("Supervisor: ready_to_drive -- invalid time format ({})", end_str);
             let mut sup = SUPERVISORY.write().await;
             sup.ready_to_drive_request = false;
             sup.ready_to_drive_active = false;
@@ -603,12 +603,12 @@ async fn evaluate_ready_to_drive() {
     let today_selected    = days.get(weekday).copied().unwrap_or(false);
     let tomorrow_selected = days.get((weekday + 1) % 7).copied().unwrap_or(false);
 
-    // Active window: start_min → end_min + 120 (with midnight crossover).
+    // Active window: start_min -> end_min + 120 (with midnight crossover).
     // When the window crosses midnight the start portion is on the previous day,
     // so we check tomorrow's selection then, and today's selection in the morning portion.
     let end_plus_2h = (end_min + 120) % 1440;
     let in_window = if start_min <= end_plus_2h {
-        // No midnight crossing — entire window on one day, check today
+        // No midnight crossing -- entire window on one day, check today
         today_selected && current_min >= start_min && current_min < end_plus_2h
     } else {
         // Window crosses midnight:
@@ -622,7 +622,7 @@ async fn evaluate_ready_to_drive() {
     {
         let mut sup = SUPERVISORY.write().await;
         if sup.ready_to_drive_request != request {
-            log::info!("Supervisor: ready_to_drive_request → {} (start: {}, end: {}+2h, today: {}, tomorrow: {})",
+            log::info!("Supervisor: ready_to_drive_request -> {} (start: {}, end: {}+2h, today: {}, tomorrow: {})",
                 request, start_time_str, end_str, today_selected, tomorrow_selected);
             sup.ready_to_drive_request = request;
         }
@@ -631,7 +631,7 @@ async fn evaluate_ready_to_drive() {
     if !request || !enabled {
         let mut sup = SUPERVISORY.write().await;
         if sup.ready_to_drive_active {
-            log::info!("Supervisor: ready_to_drive_active → false ({})",
+            log::info!("Supervisor: ready_to_drive_active -> false ({})",
                 if !request { "outside window" } else { "disabled in settings" });
             sup.ready_to_drive_active = false;
         }
@@ -641,7 +641,7 @@ async fn evaluate_ready_to_drive() {
     if !matches!(mode, OperationMode::V2h) {
         let mut sup = SUPERVISORY.write().await;
         if sup.ready_to_drive_active {
-            log::info!("Supervisor: ready_to_drive_active → false (not in V2h, mode: {:?})", mode);
+            log::info!("Supervisor: ready_to_drive_active -> false (not in V2h, mode: {:?})", mode);
             sup.ready_to_drive_active = false;
         }
         return;
@@ -649,7 +649,7 @@ async fn evaluate_ready_to_drive() {
 
     let mut sup = SUPERVISORY.write().await;
     if !sup.ready_to_drive_active {
-        log::info!("Supervisor: ready_to_drive_active → true (start: {}, end: {}+2h)",
+        log::info!("Supervisor: ready_to_drive_active -> true (start: {}, end: {}+2h)",
             start_time_str, end_str);
         sup.ready_to_drive_active = true;
     }

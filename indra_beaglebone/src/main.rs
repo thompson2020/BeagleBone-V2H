@@ -33,18 +33,18 @@ static POOL: OnceCell<Database> = OnceCell::const_new();
  * Outstanding TODO
  *
  * Firmware (ev_connect.rs)
- *     Insulation tests skipped — see ev_connect.rs "insulation tests skipped !!!"
+ *     Insulation tests skipped -- see ev_connect.rs "insulation tests skipped !!!"
  *     ADC SPI driver needed for differential voltage across contactors / welding detection
- *     Review CHAdeMO shutdown procedure — OBD2 fault codes may be thrown by EV on session end
+ *     Review CHAdeMO shutdown procedure -- OBD2 fault codes may be thrown by EV on session end
  *
  * Web UI (+page.svelte)
- *     Event table actions — Edit, Delete, Add Event, Update
+ *     Event table actions -- Edit, Delete, Add Event, Update
  */
 
 async fn setup_can_interfaces() {
     log::info!("CAN: bringing up interfaces");
     for iface in &["can0", "can1"] {
-        // Take down first — ignore error, interface may already be down
+        // Take down first -- ignore error, interface may already be down
         let _ = tokio::process::Command::new("ip")
             .args(["link", "set", iface, "down"])
             .status()
@@ -83,7 +83,7 @@ async fn main() -> Result<(), &'static str> {
         .unwrap_or_else(|_| chrono::Local::now());
 
     println!("\n{}", "=".repeat(70));
-    println!("🚀 INDRA BEAGLEBONE V2H CHARGER");
+    println!(" INDRA BEAGLEBONE V2H CHARGER");
     println!("   Version     : {}", env!("CARGO_PKG_VERSION"));
     println!("   Built       : {}", build_time.format("%Y-%m-%d %H:%M:%S"));
     println!("   Started at  : {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z"));
@@ -143,12 +143,12 @@ async fn main() -> Result<(), &'static str> {
         let _ = estop.export();
         let _ = estop.set_direction(Direction::In);
         if estop.get_value().unwrap_or(1) == 0 {
-            log::warn!("[ESTOP] E-Stop held at startup — waiting for release (red blink on panel)");
+            log::warn!("[ESTOP] E-Stop held at startup -- waiting for release (red blink on panel)");
             let _ = led_tx.send(panel::LedCommand::Logo(panel::State::Initialising)).await;
             loop {
                 tokio::time::sleep(Duration::from_millis(200)).await;
                 if estop.get_value().unwrap_or(0) == 1 {
-                    log::info!("[ESTOP] E-Stop released — resuming startup");
+                    log::info!("[ESTOP] E-Stop released -- resuming startup");
                     break;
                 }
             }

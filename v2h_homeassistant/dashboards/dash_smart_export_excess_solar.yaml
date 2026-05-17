@@ -36,10 +36,10 @@ views:
             unitstr: p
             lowlimit: null
             mediumlimit: sensor.agile_import_cheapest_rate
-            highlimit: sensor.smart_export_threshold
-            roundUnits: 1
+            highlimit: sensor.agile_import_cheapest_rate
+            roundUnits: 2
             cheapest: true
-            multiplier: 100
+            multiplier: 1
             exportrates: true
           - type: custom:octopus-energy-rates-card
             currentEntity: sensor.agile_export_next_day_rates
@@ -51,10 +51,10 @@ views:
             unitstr: p
             lowlimit: null
             mediumlimit: sensor.agile_import_cheapest_rate
-            highlimit: sensor.smart_export_threshold
-            roundUnits: 1
+            highlimit: sensor.agile_import_cheapest_rate
+            roundUnits: 2
             cheapest: true
-            multiplier: 100
+            multiplier: 1
             exportrates: true
       - type: grid
         cards:

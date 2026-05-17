@@ -37,7 +37,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 
     // let operational_mode = OPERATIONAL_MODE.clone();
     let mut chademo = Chademo::new();
-    let mut last_logo = crate::data_io::panel::State::Off; // sentinel — forces first send
+    let mut last_logo = crate::data_io::panel::State::Off; // sentinel -- forces first send
     let t100ms = Duration::from_millis(100);
     let predata = PREDATA.clone();
     let (pre_tx, pre_rx) = statics::pre_channel();
@@ -51,7 +51,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             handle.abort(); // Abort the previous tasks
         }
         // Reset electrical state immediately so the UI snapshot shows clean zeros while idle.
-        // SoC is deliberately kept — it's the last known EV battery level.
+        // SoC is deliberately kept -- it's the last known EV battery level.
         *PREDATA.lock().await = PreCharger::default();
         chademo.update_amps(0i16);
         chademo.x102.charging_current_request = 0;
@@ -134,9 +134,9 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
         assert!(chademo.x109.status.status_vehicle_connector_lock);
         // update_chademo_mutex(&chademo).await;
         // chademo.precharge();
-        // TODO: Insulation tests skipped — requires external SPI ADC for contactor differential
+        // TODO: Insulation tests skipped -- requires external SPI ADC for contactor differential
         // voltage measurement and welding detection. BeagleBone internal ADC is disabled
-        // (disable_uboot_overlay_adc=1 in uEnv.txt). An external SPI ADC was planned —
+        // (disable_uboot_overlay_adc=1 in uEnv.txt). An external SPI ADC was planned --
         // spidev = "0.5.2" is commented out in Cargo.toml. Chip model unknown (no schematic
         // available); physically trace PCB to identify IC and SPI pins before implementing.
         // Once chip is identified: uncomment spidev in Cargo.toml, write a driver wrapper,
@@ -181,15 +181,15 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
 
         // end charge ========================================================
         //
-        // TODO: Review CHAdeMO shutdown procedure — OBD2 fault codes may be thrown by EV.
+        // TODO: Review CHAdeMO shutdown procedure -- OBD2 fault codes may be thrown by EV.
         // Suspected causes:
-        //   1. PRE is shut down before the CAN handshake completes — EV may see DC voltage
+        //   1. PRE is shut down before the CAN handshake completes -- EV may see DC voltage
         //      drop before the protocol reaches its terminal state, triggering a fault.
         //   2. x109 status 0x25 (set after contactors open) has status_station (bit 0) set
-        //      alongside the stop flag (bit 5) — may be contradictory per CHAdeMO spec.
-        //   3. x109.output_voltage is never updated during shutdown — EV receives a stale
+        //      alongside the stop flag (bit 5) -- may be contradictory per CHAdeMO spec.
+        //   3. x109.output_voltage is never updated during shutdown -- EV receives a stale
         //      voltage value and cross-checks it against its own measurement.
-        //   4. charging_stop_control_release() is commented out below — 0x24 (bit 5 set)
+        //   4. charging_stop_control_release() is commented out below -- 0x24 (bit 5 set)
         //      may already cover this, but worth confirming against spec.
         // To diagnose: capture the OBD2 DTC code from the car after a session and match
         // against CHAdeMO fault table. ERROR log below will flag x102 fault bits if set.
@@ -206,7 +206,7 @@ pub async fn ev100ms(led_tx: LedTx, mode_rx: ChademoRx) -> Result<(), IndraError
             return Ok(());
         }
         drop(can);
-        //loops back to idleß
+        //loops back to idle
     }
 }
 
@@ -246,7 +246,7 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
                     chademo.x109.status = X109Status::from(0x25);
                     let x102status: u8 = chademo.x102.status.into();
                     if chademo.x102.fault() {
-                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} — check car for DTC codes", x102status);
+                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} -- check car for DTC codes", x102status);
                     }
                     continue;
                 }
@@ -293,7 +293,7 @@ async fn charge_mode(
     let mut last_meter = 0.01;
     let mut counter = 0;
 
-    // PID state — shared across all meter-based modes.
+    // PID state -- shared across all meter-based modes.
     let mut dv: f32 = 0.0;
     let mut inner_tick: u32 = 0;
 
@@ -395,7 +395,7 @@ async fn charge_mode(
         }
 
         // Slew-rate limit: cap the per-tick change to protect the PRE on direction reversals.
-        // 2 A/100 ms = 20 A/s  →  full -16 A→+16 A reversal takes ~1.6 s.
+        // 2 A/100 ms = 20 A/s  ->  full -16 A->+16 A reversal takes ~1.6 s.
         const SLEW: f32 = 2.0;
         let charging_current_request =
             last_amps + (charging_current_request - last_amps).clamp(-SLEW, SLEW);
@@ -426,7 +426,7 @@ async fn charge_mode(
 
 // Outer+inner PI loop shared by all meter-based modes.
 //
-// Outer loop fires once per new meter reading — converts the watt imbalance into a DC amp
+// Outer loop fires once per new meter reading -- converts the watt imbalance into a DC amp
 // target (DV). meter_offset shifts the balance point (used by smart-export to settle at a
 // non-zero export level). Efficiency correction: meter > 0 divides by EFF, meter < 0 multiplies.
 //
@@ -514,7 +514,7 @@ async fn v2h_requested_amps(
         drop(settings);
         let soc = *chademo.soc();
         // 1% deadband: stop at soc_limit, only restart below soc_limit-1.
-        // last_amps == 0.0 means we were already stopped — stay stopped until below deadband.
+        // last_amps == 0.0 means we were already stopped -- stay stopped until below deadband.
         if soc >= soc_limit || (last_amps == 0.0 && soc >= soc_limit.saturating_sub(1)) {
             if last_amps > 0.5 {
                 log::info!("Off-peak SoC limit reached ({}% >= {}%), stopping charge", soc, soc_limit);
@@ -538,7 +538,7 @@ async fn v2h_requested_amps(
             0.0
         } else {
             let lower = -(max_amps as f32);
-            // Allow charging (positive amps) to absorb excess solar — only prevent charging
+            // Allow charging (positive amps) to absorb excess solar -- only prevent charging
             // once the car reaches its SoC ceiling.
             let upper = if soc >= soc_max { 0.0 } else { max_amps as f32 };
             if soc >= soc_max && last_amps > 0.5 {
@@ -575,7 +575,7 @@ async fn v2h_requested_amps(
         let soc_at_min = *chademo.soc() <= soc_min;
         let soc_at_max = *chademo.soc() >= soc_max;
 
-        // Permitted range for this tick — derived from SoC position and operator flags
+        // Permitted range for this tick -- derived from SoC position and operator flags
         let upper = if export_excess_solar || smart_export_excess_solar_active || soc_at_max { 0.0 } else { max_amps as f32 };
         let lower = if self_use && !soc_at_min { -(max_amps as f32) } else { 0.0 };
         *dv = dv.clamp(lower, upper);

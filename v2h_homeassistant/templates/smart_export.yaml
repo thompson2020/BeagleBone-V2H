@@ -9,14 +9,21 @@
       minutes: "/30"
   sensor:
     - name: "agile_import_cheapest_rate"
-      unit_of_measurement: "p/kWh"
+      unit_of_measurement: "GBP/kWh"
       state: >
         {% set rates = state_attr('event.octopus_energy_electricity_25j0059396_1100003642142_current_day_rates', 'rates') | default([], true) %}
         {% set vals = rates | map(attribute='value_inc_vat') | list %}
-        {{ ((vals | min) * 100) | round(2) if vals | count > 0 else 0 }}
+        {{ (vals | min) | round(4) if vals | count > 0 else 0 }}
+
+    - name: "agile_import_peak_rate"
+      unit_of_measurement: "GBP/kWh"
+      state: >
+        {% set rates = state_attr('event.octopus_energy_electricity_25j0059396_1100003642142_current_day_rates', 'rates') | default([], true) %}
+        {% set vals = rates | map(attribute='value_inc_vat') | list %}
+        {{ (vals | max) | round(4) if vals | count > 0 else 0 }}
 
     - name: "smart_export_threshold"
-      unit_of_measurement: "p/kWh"
+      unit_of_measurement: "GBP/kWh"
       state: >
         {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
         {% set multiplier = states('input_number.smart_export_multiplier') | float(200) %}

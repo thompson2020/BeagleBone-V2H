@@ -84,7 +84,7 @@ impl OperatorSettings {
         self.v2h_soc_min       = self.v2h_soc_min.clamp(min_soc, max_soc);
         self.v2h_soc_max       = self.v2h_soc_max.clamp(min_soc, max_soc);
         if self.v2h_soc_min >= self.v2h_soc_max {
-            log::warn!("{TAG} v2h_soc_min ({}) >= v2h_soc_max ({}) — pulling min down", self.v2h_soc_min, self.v2h_soc_max);
+            log::warn!("{TAG} v2h_soc_min ({}) >= v2h_soc_max ({}) -- pulling min down", self.v2h_soc_min, self.v2h_soc_max);
             self.v2h_soc_min = self.v2h_soc_max.saturating_sub(5).max(min_soc);
         }
         self.v2h_soc_max_boost  = self.v2h_soc_max_boost.clamp(min_soc, self.v2h_soc_max);
@@ -117,7 +117,7 @@ pub async fn load() -> OperatorSettings {
                 settings
             }
             Err(e) => {
-                log::warn!("{TAG} parse error in {} ({}) — reverting to defaults", SETTINGS_FILE, e);
+                log::warn!("{TAG} parse error in {} ({}) -- reverting to defaults", SETTINGS_FILE, e);
                 let defaults = OperatorSettings::default();
                 log::info!("{TAG} defaults | {}", to_json(&defaults));
                 let _ = save(&defaults).await;
@@ -125,7 +125,7 @@ pub async fn load() -> OperatorSettings {
             }
         },
         Err(_) => {
-            log::info!("{TAG} {} not found — creating with defaults", SETTINGS_FILE);
+            log::info!("{TAG} {} not found -- creating with defaults", SETTINGS_FILE);
             let defaults = OperatorSettings::default();
             log::info!("{TAG} defaults | {}", to_json(&defaults));
             let _ = save(&defaults).await;
