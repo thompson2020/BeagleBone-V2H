@@ -463,12 +463,12 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         ("beaglebone_v2h_soc_min",              "v2h_soc_min",              "V2H SoC Min",          "v2h_soc_min",             10, 100,   1, "%"),
         ("beaglebone_v2h_soc_max",              "v2h_soc_max",              "V2H SoC Max",          "v2h_soc_max",             10, 100,   1, "%"),
         ("beaglebone_v2h_soc_max_boost",        "v2h_soc_max_boost",        "V2H SoC Max Boost",    "v2h_soc_max_boost",       10, 100,   1, "%"),
-        ("beaglebone_v2h_max_amps",             "v2h_max_amps",             "V2H Max Amps",         "v2h_max_amps",             1,  16,   1, "A"),
+        ("beaglebone_v2h_max_amps",             "v2h_max_amps",             "V2H Max Amps",         "v2h_max_amps",             1,  15,   1, "A"),
         ("beaglebone_v2h_rtd_soc",              "v2h_rtd_soc",              "RTD SoC Target",       "ready_to_drive_soc",      10, 100,   1, "%"),
         ("beaglebone_v2h_smart_export_limit_w", "v2h_smart_export_limit_w", "Smart Export Limit",   "smart_export_limit_w",     0, 10000, 100, "W"),
         ("beaglebone_v2h_smart_export_soc_min", "v2h_smart_export_soc_min", "Smart Export SoC Min", "smart_export_soc_min",    10, 100,   1, "%"),
         ("beaglebone_v2h_charge_soc_limit",     "v2h_charge_soc_limit",     "Charge SoC Limit",     "charge_soc_limit",        10, 100,   1, "%"),
-        ("beaglebone_v2h_charge_amps",          "v2h_charge_amps",          "Charge Amps",          "charge_amps",              1,  16,   1, "A"),
+        ("beaglebone_v2h_charge_amps",          "v2h_charge_amps",          "Charge Amps",          "charge_amps",              1,  15,   1, "A"),
     ];
     for &(uid, oid, name, field, min, max, step, unit) in settings_numbers {
         let tpl     = format!("{{{{value_json.settings.{}}}}}", field);

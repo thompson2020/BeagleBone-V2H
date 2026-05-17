@@ -463,6 +463,23 @@ views:
           - type: heading
             heading: Time/Event Based
             heading_style: subtitle
+          - type: custom:expander-card
+            title: Ready to Drive Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_rtd_soc_target
+                    name: SoC Target
+                  - entity: text.v2h_rtd_start_time
+                    name: Start Time
+                  - entity: text.v2h_rtd_end_time
+                    name: End Time
+            grid_options:
+              columns: 12
+              rows: auto
           - type: horizontal-stack
             cards:
               - type: custom:button-card
@@ -529,19 +546,17 @@ views:
               columns: 12
               rows: auto
           - type: custom:expander-card
-            title: Ready to Drive Settings
+            title: Off-Peak Settings
             expanded: false
             padding: 4
             clear: true
             cards:
               - type: entities
                 entities:
-                  - entity: number.v2h_rtd_soc_target
-                    name: SoC Target
-                  - entity: text.v2h_rtd_start_time
-                    name: Start Time
-                  - entity: text.v2h_rtd_end_time
-                    name: End Time
+                  - entity: text.v2h_off_peak_start
+                    name: Start
+                  - entity: text.v2h_off_peak_end
+                    name: End
             grid_options:
               columns: 12
               rows: auto
@@ -573,12 +588,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -616,24 +625,24 @@ views:
             grid_options:
               columns: 12
               rows: auto
+          - type: heading
+            heading: Smart
+            heading_style: subtitle
           - type: custom:expander-card
-            title: Off-Peak Settings
+            title: Smart Export Settings
             expanded: false
             padding: 4
             clear: true
             cards:
               - type: entities
                 entities:
-                  - entity: text.v2h_off_peak_start
-                    name: Start
-                  - entity: text.v2h_off_peak_end
-                    name: End
+                  - entity: number.v2h_smart_export_soc_min
+                    name: SoC Min
+                  - entity: number.v2h_smart_export_limit
+                    name: Export Limit
             grid_options:
               columns: 12
               rows: auto
-          - type: heading
-            heading: Smart
-            heading_style: subtitle
           - type: horizontal-stack
             cards:
               - type: custom:button-card
@@ -699,21 +708,6 @@ views:
             grid_options:
               columns: 12
               rows: auto
-          - type: custom:expander-card
-            title: Smart Export Settings
-            expanded: false
-            padding: 4
-            clear: true
-            cards:
-              - type: entities
-                entities:
-                  - entity: number.v2h_smart_export_soc_min
-                    name: SoC Min
-                  - entity: number.v2h_smart_export_limit
-                    name: Export Limit
-            grid_options:
-              columns: 12
-              rows: auto
           - type: horizontal-stack
             cards:
               - type: custom:button-card
@@ -776,6 +770,21 @@ views:
                         [[[ return entity.state === 'on'
                             ? '#4ade80' : 'var(--secondary-text-color)' ]]]
                     - font-size: 0.7em
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: custom:expander-card
+            title: Smart Charge Settings
+            expanded: false
+            padding: 4
+            clear: true
+            cards:
+              - type: entities
+                entities:
+                  - entity: number.v2h_charge_soc_limit
+                    name: SoC Limit
+                  - entity: number.v2h_charge_amps
+                    name: Amps
             grid_options:
               columns: 12
               rows: auto
@@ -847,21 +856,6 @@ views:
                         [[[ return entity.state === 'on'
                             ? '#4ade80' : 'var(--secondary-text-color)' ]]]
                     - font-size: 0.7em
-            grid_options:
-              columns: 12
-              rows: auto
-          - type: custom:expander-card
-            title: Smart Charge Settings
-            expanded: false
-            padding: 4
-            clear: true
-            cards:
-              - type: entities
-                entities:
-                  - entity: number.v2h_charge_soc_limit
-                    name: SoC Limit
-                  - entity: number.v2h_charge_amps
-                    name: Amps
             grid_options:
               columns: 12
               rows: auto
@@ -1086,6 +1080,75 @@ views:
                 name: Phase (W)
                 color: '#f59e0b'
                 type: line
+                group_by:
+                  func: avg
+                  duration: 1min
+            grid_options:
+              columns: 12
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: PRE Thermal 2h
+            graph_span: 2h
+            span:
+              end: minute
+            yaxis:
+              - id: temp
+                min: 20
+                max: 70
+                decimals: 0
+                apex_config:
+                  tickAmount: 5
+                  title:
+                    text: degC
+              - id: fan
+                opposite: true
+                min: 0
+                max: 100
+                decimals: 0
+                apex_config:
+                  tickAmount: 5
+                  title:
+                    text: Fan %
+            apex_config:
+              chart:
+                height: 300
+              grid:
+                show: true
+                borderColor: rgba(128,128,128,0.25)
+                strokeDashArray: 2
+              stroke:
+                width: 2
+                curve: smooth
+              legend:
+                show: true
+                position: top
+              annotations:
+                yaxis:
+                  - 'y': 39
+                    yAxisIndex: 0
+                    borderColor: '#f59e0b'
+                    strokeDashArray: 4
+                    opacity: 0.6
+                  - 'y': 48
+                    yAxisIndex: 0
+                    borderColor: '#ef4444'
+                    strokeDashArray: 4
+                    opacity: 0.6
+            series:
+              - entity: sensor.v2h_pre_temperature
+                name: Temp (degC)
+                color: '#f59e0b'
+                type: line
+                yaxis_id: temp
+                group_by:
+                  func: avg
+                  duration: 1min
+              - entity: sensor.v2h_pre_fan_duty
+                name: Fan (%)
+                color: '#60a5fa'
+                type: line
+                yaxis_id: fan
                 group_by:
                   func: avg
                   duration: 1min

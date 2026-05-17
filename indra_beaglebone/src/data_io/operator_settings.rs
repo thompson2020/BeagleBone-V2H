@@ -50,7 +50,7 @@ impl Default for OperatorSettings {
             v2h_soc_min:          31,
             v2h_soc_max:          90,
             v2h_soc_max_boost:    80,
-            v2h_max_amps:         16,
+            v2h_max_amps:         15,
             self_use:             true,
             export_excess_solar:  false,
             ev_drain_protection:  false,
@@ -68,7 +68,7 @@ impl Default for OperatorSettings {
             smart_export_soc_min: 31,
             smart_export_excess_solar:  false,
             charge_soc_limit:     90,
-            charge_amps:          16,
+            charge_amps:          15,
             charge_eco:           false,
         }
     }

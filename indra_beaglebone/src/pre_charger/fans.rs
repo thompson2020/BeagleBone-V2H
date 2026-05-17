@@ -3,9 +3,9 @@ use crate::log_error;
 use std::time::Duration;
 use tokio::time::Instant;
 
-// Setpoints
-const FAN100: f32 = 70.0;
-const FAN0: f32 = 50.0;
+const FAN20: f32 = 39.0;   // temp at which fan starts (20% duty)
+const FAN100: f32 = 48.0;  // temp at which fan reaches full speed
+const FAN_HYST: f32 = 1.0; // fan only stops below FAN20 - FAN_HYST (38°C)
 
 #[derive(Default, Copy, Clone, Debug)]
 struct Duty {
@@ -63,7 +63,8 @@ impl Fan {
     }
     pub fn update(&mut self, temp: f32) -> u8 {
         let elapsed = self.duty.elapsed(Duration::from_secs(20));
-        let new_duty = Duty::new(temp_to_duty(temp));
+        let fan_on = self.duty.val > 0;
+        let new_duty = Duty::new(temp_to_duty(temp, fan_on));
 
         if self.duty.val != new_duty.val {
             if self.duty.val > new_duty.val && !elapsed {
@@ -85,10 +86,12 @@ impl Fan {
     }
 }
 
-fn temp_to_duty(value: impl Into<f32>) -> u8 {
-    let old_range = FAN100 - FAN0;
-    let new_range = 100.0 - 0.1;
+fn temp_to_duty(value: impl Into<f32>, fan_on: bool) -> u8 {
     let value: f32 = value.into();
-    let duty = (((value - FAN0) * new_range / old_range) + 0.1) as u8;
-    duty.min(100)
+    let stop_threshold = if fan_on { FAN20 - FAN_HYST } else { FAN20 };
+    if value < stop_threshold {
+        return 0;
+    }
+    let duty = ((value - FAN20) / (FAN100 - FAN20) * 80.0 + 20.0) as u8;
+    duty.clamp(20, 100)
 }

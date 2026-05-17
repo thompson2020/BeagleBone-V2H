@@ -154,8 +154,8 @@
 	let showEvDrainProtectionOptions = false;
 	let offPeakStart = '00:30';
 	let offPeakEnd = '04:30';
-	let v2hMaxAmps = 16;
-	let amps_value = 16;
+	let v2hMaxAmps = 15;
+	let amps_value = 15;
 	let soc_range_value = 90;
 	let chargeEco = false;
 
@@ -477,7 +477,7 @@
 					<RangeSlider name="soc-max" bind:value={v2h_soc_max} on:change={sendSettings} min={0} max={100} step={5} ticked>
 						<div class="flex justify-between items-center"><div class="text-xs">SoC Max (Solar)</div><div class="text-xs">{v2h_soc_max}%</div></div>
 					</RangeSlider>
-					<RangeSlider name="v2h-amps" bind:value={v2hMaxAmps} on:change={sendSettings} min={0} max={16} step={1} ticked>
+					<RangeSlider name="v2h-amps" bind:value={v2hMaxAmps} on:change={sendSettings} min={0} max={15} step={1} ticked>
 						<div class="flex justify-between items-center"><div class="text-xs">Max Amps</div><div class="text-xs">{v2hMaxAmps}A</div></div>
 					</RangeSlider>
 				</div>
@@ -675,8 +675,8 @@
 					<RangeSlider name="soc" id="range-slider-boost-soc" bind:value={soc_range_value} on:change={sendSettings} min={10} max={100} step={5} ticked>
 						<div class="flex justify-between items-center"><div class="text-xs">SoC Max</div><div class="text-xs">{soc_range_value} / 100</div></div>
 					</RangeSlider>
-					<RangeSlider name="amps" id="range-slider-amps" bind:value={amps_value} on:change={sendSettings} max={16} step={1} ticked>
-						<div class="flex justify-between items-center"><div class="text-xs">Max Amps</div><div class="text-xs">{amps_value} / 16</div></div>
+					<RangeSlider name="amps" id="range-slider-amps" bind:value={amps_value} on:change={sendSettings} max={15} step={1} ticked>
+						<div class="flex justify-between items-center"><div class="text-xs">Max Amps</div><div class="text-xs">{amps_value} / 15</div></div>
 					</RangeSlider>
 				</div>
 			{/if}
