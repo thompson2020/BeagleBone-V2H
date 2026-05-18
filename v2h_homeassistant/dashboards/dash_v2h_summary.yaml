@@ -280,7 +280,7 @@ views:
                   content: "Discharging";
                   position: absolute;
                   left: 8px;
-                  bottom: 28px;  /* ↑ move up to sit near scale */
+                  bottom: 28px;
                   font-size: 12px;
                   color: var(--red-color);
                 }
@@ -289,12 +289,12 @@ views:
                   content: "Charging";
                   position: absolute;
                   right: 8px;
-                  bottom: 28px;  /* same height as left */
+                  bottom: 28px;
                   font-size: 12px;
                   color: var(--green-color);
                 }
 
-                    ha-card::marker {
+                ha-card::marker {
                 }
                 ha-card > div::before {
                   content: "Battery";
@@ -816,12 +816,6 @@ views:
                   action: none
                 styles:
                   card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
                     - height: 48px
                   icon:
                     - color: |
@@ -1125,7 +1119,7 @@ views:
                 position: top
               annotations:
                 yaxis:
-                  - 'y': 39
+                  - 'y': 40.1
                     yAxisIndex: 0
                     borderColor: '#f59e0b'
                     strokeDashArray: 4
@@ -1154,6 +1148,12 @@ views:
                   duration: 1min
             grid_options:
               columns: 12
+          - title: History
+            type: history-graph
+            hours_to_show: 24
+            entities:
+              - sensor.v2h_pre_fan_duty
+              - sensor.v2h_pre_temperature
       - type: grid
         cards:
           - type: heading
@@ -1282,3 +1282,6 @@ views:
             grid_options:
               columns: 12
               rows: auto
+      - cards:
+          - type: heading
+            heading: History

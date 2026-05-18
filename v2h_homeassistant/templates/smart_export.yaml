@@ -27,7 +27,7 @@
       state: >
         {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
         {% set multiplier = states('input_number.smart_export_multiplier') | float(200) %}
-        {{ (cheapest * (multiplier / 100)) | round(2) if cheapest > 0 else 0 }}
+        {{ (cheapest * (multiplier / 100)) | round(3) if cheapest > 0 else 0 }}
 
     - name: "smart_export_status"
       state: >

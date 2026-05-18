@@ -1,0 +1,24 @@
+- sensor:
+    - name: "octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot1_start"
+      state: >
+        {% set d = state_attr('binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching', 'planned_dispatches') | default([]) %}
+        {{ d[0].start if d | count > 0 else none }}
+
+    - name: "octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot1_end"
+      state: >
+        {% set d = state_attr('binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching', 'planned_dispatches') | default([]) %}
+        {{ d[0].end if d | count > 0 else none }}
+
+    - name: "octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot2_start"
+      state: >
+        {% set d = state_attr('binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching', 'planned_dispatches') | default([]) %}
+        {{ d[1].start if d | count > 1 else none }}
+
+    - name: "octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot2_end"
+      state: >
+        {% set d = state_attr('binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching', 'planned_dispatches') | default([]) %}
+        {{ d[1].end if d | count > 1 else none }}
+
+    - name: "octopus_energy_electricity_25j0059396_1100003642142_off_peak_current_start"
+      state: >
+        {{ state_attr('binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak', 'current_start') }}
