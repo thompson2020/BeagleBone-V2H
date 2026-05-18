@@ -3,9 +3,9 @@ use crate::log_error;
 use std::time::Duration;
 use tokio::time::Instant;
 
-const FAN20: f32 = 39.0;   // temp at which fan starts (20% duty)
+const FAN20: f32 = 40.1;   // temp at which fan starts (20% duty)
 const FAN100: f32 = 48.0;  // temp at which fan reaches full speed
-const FAN_HYST: f32 = 1.0; // fan only stops below FAN20 - FAN_HYST (38°C)
+const FAN_HYST: f32 = 1.0; // fan only stops below FAN20 - FAN_HYST (39.1 degC)
 
 #[derive(Default, Copy, Clone, Debug)]
 struct Duty {
