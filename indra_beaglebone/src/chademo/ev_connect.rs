@@ -246,7 +246,7 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
                     chademo.x109.status = X109Status::from(0x25);
                     let x102status: u8 = chademo.x102.status.into();
                     if chademo.x102.fault() {
-                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} -- check car for DTC codes", x102status);
+                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} faults=[{}] -- check car for DTC codes", x102status, chademo.x102.faults());
                     }
                     continue;
                 }
@@ -308,8 +308,8 @@ async fn charge_mode(
                 let x102status: u8 = chademo.x102.status.into();
                 let state = *chademo.state();
                 log::warn!(
-                    "EV stopped charge | mode={:?} SoC={}% x102=0x{:02x} fault={} last_amps={:.1}A",
-                    state, chademo.soc(), x102status, chademo.x102.fault(), last_amps
+                    "EV stopped charge | mode={:?} SoC={}% x102=0x{:02x} faults=[{}] last_amps={:.1}A",
+                    state, chademo.soc(), x102status, chademo.x102.faults(), last_amps
                 );
                 break if state.is_quit() { state } else { Idle };
             }
@@ -691,12 +691,12 @@ async fn precharge(
             let predata = predata.lock().await;
             chademo.x109.output_voltage = predata.get_dc_output_volts();
 
-            // dbg!(chademo.x102);
-            // dbg!(chademo.x109);
+            log::trace!("precharge x102: {:?}", chademo.x102);
+            log::trace!("precharge x109: {:?}", chademo.x109);
             if chademo.x102.contactors_closed() {
                 if predata.volts_equal() {
                     if chademo.x102.car_ready() {
-                        // dbg!(&chademo);
+                        log::trace!("precharge chademo state: {:?}", chademo);
                         return chademo.close_contactors();
                     } else {
                         log::warn!("x102.5.0 low");

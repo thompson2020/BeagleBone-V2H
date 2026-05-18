@@ -72,6 +72,9 @@ impl X102 {
     pub fn fault(&self) -> bool {
         self.faults.into()
     }
+    pub fn faults(&self) -> X102Faults {
+        self.faults
+    }
     pub fn contactors_closed(&self) -> bool {
         !self.status.status_vehicle
     }
@@ -140,6 +143,26 @@ impl Into<bool> for X102Faults {
             | self.fault_battery_current_deviation
             | self.fault_battery_undervoltage
             | self.fault_battery_overvoltage
+    }
+}
+
+impl std::fmt::Display for X102Faults {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let active: Vec<&str> = [
+            self.fault_battery_voltage_deviation.then_some("voltage_deviation"),
+            self.fault_high_battery_temperature.then_some("high_temperature"),
+            self.fault_battery_current_deviation.then_some("current_deviation"),
+            self.fault_battery_undervoltage.then_some("undervoltage"),
+            self.fault_battery_overvoltage.then_some("overvoltage"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if active.is_empty() {
+            write!(f, "none")
+        } else {
+            write!(f, "{}", active.join("|"))
+        }
     }
 }
 
