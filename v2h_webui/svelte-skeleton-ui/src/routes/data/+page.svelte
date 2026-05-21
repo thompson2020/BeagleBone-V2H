@@ -45,8 +45,9 @@
 		x102: { control_protocol_number_ev: number; target_battery_voltage: number; charging_current_request: number; faults: X102Faults; status: X102Status; state_of_charge: number; };
 		x200: { maximum_discharge_current: number; minimum_discharge_voltage: number; minimum_battery_discharge_level: number; max_remaining_capacity_for_charging: number; };
 		x201: { sequence: number; approx_discharge_time: number; available_energy: number; };
+		x700: { automaker_code: number; model_code: number; capability: number; };
 		x108: { available_output_current: number; avaible_output_voltage: number; welding_detection: number; threshold_voltage: number; };
-		x109: { status: X109Status; output_voltage: number; output_current: number; remaining_charging_time_10s_bit: number; remaining_charging_time_1min_bit: number; };
+		x109: { control_protocol_number_qc: number; discharge_compatitiblity: boolean; status: X109Status; output_voltage: number; output_current: number; remaining_charging_time_10s_bit: number; remaining_charging_time_1min_bit: number; };
 		x208: { discharge_current: number; input_voltage: number; input_current: number; lower_threshold_voltage: number; };
 		x209: { sequence: number; remaing_discharge_time: number; };
 		gpio: GpioData;
@@ -284,22 +285,22 @@
 				<span class="text-surface-400">Charge request</span> <span class="font-mono">{x.charging_current_request} A</span>
 				<span class="text-surface-400">SoC</span>            <span class="font-mono">{x.state_of_charge}%</span>
 			</div>
-			<div class="text-xs font-medium text-surface-400 mb-1">Status</div>
+			<div class="text-xs font-medium text-surface-400 mb-1">Status (byte 5)</div>
 			<div class="flex flex-col gap-0.5 text-xs mb-3">
-				<div class="flex justify-between items-center"><span class="text-surface-400">Charging enabled</span>    <span class={okDot(x.status.status_vehicle_charging)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">EV contactors closed</span><span class={okDot(!x.status.status_vehicle)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">V2H compatible</span>      <span class={okDot(x.status.status_discharge_compatible)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">No stop request</span>     <span class={okDot(!x.status.status_normal_stop_request)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Charging system OK</span>  <span class={okDot(!x.status.status_charging_system)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">In Park</span>             <span class={okDot(!x.status.status_vehicle_shifter_position)}></span></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">V2H compatible (5.7)</span>                            <span class={okDot(x.status.status_discharge_compatible)}></span></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Normal stop request (5.4)</span>                       <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.status_normal_stop_request ? '1' : '0'}</span><span class={faultActiveDot(x.status.status_normal_stop_request)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Contactors Closed (5.3)</span>                          <span class={okDot(!x.status.status_vehicle)}></span></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Vehicle malfunction (5.2)</span>                        <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.status_charging_system ? '1' : '0'}</span><span class={faultActiveDot(x.status.status_charging_system)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Shift Position (In Park) (5.1)</span>                  <span class={okDot(!x.status.status_vehicle_shifter_position)}></span></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Charge/discharge permission (5.0)</span>               <span class={okDot(x.status.status_vehicle_charging)}></span></div>
 			</div>
-			<div class="text-xs font-medium text-surface-400 mb-1">Faults</div>
+			<div class="text-xs font-medium text-surface-400 mb-1">Faults (byte 4)</div>
 			<div class="flex flex-col gap-0.5 text-xs">
-				<div class="flex justify-between items-center"><span class="text-surface-400">Battery overvoltage</span>     <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_overvoltage ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_overvoltage)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Battery undervoltage</span>    <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_undervoltage ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_undervoltage)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Current deviation</span>       <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_current_deviation ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_current_deviation)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">High temperature</span>        <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_high_battery_temperature ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_high_battery_temperature)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Voltage deviation</span>       <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_voltage_deviation ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_voltage_deviation)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery voltage deviation (4.4)</span> <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_voltage_deviation ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_voltage_deviation)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery High Temp (4.3)</span>         <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_high_battery_temperature ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_high_battery_temperature)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery current deviation (4.2)</span> <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_current_deviation ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_current_deviation)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery undervoltage (4.1)</span>      <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_undervoltage ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_undervoltage)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery overvoltage (4.0)</span>       <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.faults.fault_battery_overvoltage ? '1' : '0'}</span><span class={faultActiveDot(x.faults.fault_battery_overvoltage)}></span></div></div>
 			</div>
 			{:else}
 			<div class="text-xs text-surface-400">No data</div>
@@ -315,19 +316,23 @@
 			{#if latest?.chademo}
 			{@const x = latest.chademo.x109}
 			<div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs mb-3">
+				<span class="text-surface-400 whitespace-nowrap">Protocol #</span>         <span class="font-mono">{x.control_protocol_number_qc}</span>
 				<span class="text-surface-400 whitespace-nowrap">Output voltage</span>     <span class="font-mono">{x.output_voltage.toFixed(0)} V</span>
 				<span class="text-surface-400 whitespace-nowrap">Output current</span>     <span class="font-mono">{x.output_current} A</span>
 				<span class="text-surface-400 whitespace-nowrap">Time remain (10s)</span>  <span class="font-mono">{x.remaining_charging_time_10s_bit}</span>
 				<span class="text-surface-400 whitespace-nowrap">Time remain (1min)</span> <span class="font-mono">{x.remaining_charging_time_1min_bit}</span>
 			</div>
-			<div class="text-xs font-medium text-surface-400 mb-1">Status</div>
+			<div class="flex flex-col gap-0.5 text-xs mb-3">
+				<div class="flex justify-between items-center"><span class="text-surface-400">Discharge compatibility</span> <span class={okDot(x.discharge_compatitiblity)}></span></div>
+			</div>
+			<div class="text-xs font-medium text-surface-400 mb-1">Status (byte 5)</div>
 			<div class="flex flex-col gap-0.5 text-xs">
-				<div class="flex justify-between items-center"><span class="text-surface-400">Charging/Discharging</span>    <span class={okDot(x.status.status_station)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Starting/Stopping Charge</span> <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.status_charger_stop_control ? '1' : '0'}</span><span class={okDot(x.status.status_charger_stop_control)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Output energised</span>        <span class={okDot(x.status.status_vehicle_connector_lock)}></span></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">System fault</span>             <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_charging_system_malfunction ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_charging_system_malfunction)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Battery incompatible</span>     <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_battery_incompatibility ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_battery_incompatibility)}></span></div></div>
-				<div class="flex justify-between items-center"><span class="text-surface-400">Charger error</span>            <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_station_malfunction ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_station_malfunction)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Charging stop (5.5)</span>    <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.status_charger_stop_control ? '1' : '0'}</span><span class={okDot(x.status.status_charger_stop_control)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Charging system fault (5.4)</span>    <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_charging_system_malfunction ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_charging_system_malfunction)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Battery incompatible (5.3)</span>  <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_battery_incompatibility ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_battery_incompatibility)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Output energised (5.2)</span>         <span class={okDot(x.status.status_vehicle_connector_lock)}></span></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Charger malfunction (5.1)</span>      <div class="flex items-center gap-1.5"><span class="font-mono text-surface-500">{x.status.fault_station_malfunction ? '1' : '0'}</span><span class={faultActiveDot(x.status.fault_station_malfunction)}></span></div></div>
+				<div class="flex justify-between items-center"><span class="text-surface-400">Charger status (5.0)</span> <span class={okDot(x.status.status_station)}></span></div>
 			</div>
 			{:else}
 			<div class="text-xs text-surface-400">No data</div>
@@ -366,6 +371,23 @@
 				<span class="text-surface-400 whitespace-nowrap">Sequence</span>           <span class="font-mono">{x.sequence}</span>
 				<span class="text-surface-400 whitespace-nowrap">Discharge time est.</span><span class="font-mono">{x.approx_discharge_time === 0 ? '—' : x.approx_discharge_time + ' min'}</span>
 				<span class="text-surface-400 whitespace-nowrap">Available energy</span>   <span class="font-mono">{x.available_energy === 0 ? '—' : (x.available_energy / 10).toFixed(1) + ' kWh'}</span>
+			</div>
+			{:else}
+			<div class="text-xs text-surface-400">No data</div>
+			{/if}
+		</div>
+
+		<div class="card p-4">
+			<div class="flex justify-between items-baseline mb-3">
+				<div class="text-xs font-semibold text-success-500">x700 — Manufacturer ID</div>
+				<div class="text-xs text-surface-400">EV → EVSE</div>
+			</div>
+			{#if latest?.chademo?.x700}
+			{@const x = latest.chademo.x700}
+			<div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+				<span class="text-surface-400 whitespace-nowrap">Automaker code</span> <span class="font-mono">0x{x.automaker_code.toString(16).padStart(2,'0').toUpperCase()}</span>
+				<span class="text-surface-400 whitespace-nowrap">Model code</span>      <span class="font-mono">0x{x.model_code.toString(16).padStart(2,'0').toUpperCase()}</span>
+				<span class="text-surface-400 whitespace-nowrap">Capability</span>      <span class="font-mono">0x{x.capability.toString(16).padStart(2,'0').toUpperCase()}</span>
 			</div>
 			{:else}
 			<div class="text-xs text-surface-400">No data</div>
@@ -433,6 +455,14 @@
 			{:else}
 			<div class="text-xs text-surface-400">No data</div>
 			{/if}
+		</div>
+
+		<div class="card p-4 opacity-50">
+			<div class="flex justify-between items-baseline mb-3">
+				<div class="text-xs font-semibold text-secondary-500">x708 — EVSE Manufacturer ID</div>
+				<div class="text-xs text-surface-400">EVSE → EV</div>
+			</div>
+			<div class="text-xs text-surface-400 italic">Not currently transmitted — EVSE manufacturer frame not implemented</div>
 		</div>
 
 		</div>

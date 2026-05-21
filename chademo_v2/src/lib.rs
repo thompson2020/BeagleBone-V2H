@@ -75,6 +75,9 @@ impl X102 {
     pub fn faults(&self) -> X102Faults {
         self.faults
     }
+    pub fn fault_byte(&self) -> u8 {
+        self.faults.into()
+    }
     pub fn contactors_closed(&self) -> bool {
         !self.status.status_vehicle
     }
@@ -113,11 +116,11 @@ impl From<&CANFrame> for X102 {
 }
 
 /// 1 = error, 0 = normal
-#[derive(Debug, Default, Copy, Clone, serde::Serialize)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, serde::Serialize)]
 pub struct X102Faults {
     /// 102.4.4
     /// - Battery voltage deviation error
-    /// - Flag indicating the result of judgment regarding the difference between measured voltage of on- board battery and “Present output voltage” measured by the charger.
+    /// - Flag indicating the result of judgment regarding the difference between measured voltage of on-board battery and “Present output voltage” measured by the charger.
     pub fault_battery_voltage_deviation: bool,
     /// 102.4.3 - High battery temperature
     pub fault_high_battery_temperature: bool,
@@ -129,12 +132,21 @@ pub struct X102Faults {
     /// - Regardless of the condition of the opto-coupler (j), if this flag is 1, it shall be considered as the vehicle’s request to stop charging/discharging, and the EVSE shall move to the stop control.
     pub fault_battery_current_deviation: bool,
     /// 102.4.1
-    /// - Status flag indicating the voltage status of on-board battery.
+    /// - Battery undervoltage
     pub fault_battery_undervoltage: bool,
     /// 102.4.0
-    /// - Status flag indicating the voltage status of on-board battery
+    /// - Battery overvoltage
     /// Regardless of opto-coupler (j) status, the EVSE shall regard this flag as charging termination order from the vehicle if it is equal to 1, and stop charging.
     pub fault_battery_overvoltage: bool,
+}
+impl Into<u8> for X102Faults {
+    fn into(self) -> u8 {
+        (self.fault_battery_voltage_deviation as u8) << 4
+            | (self.fault_high_battery_temperature as u8) << 3
+            | (self.fault_battery_current_deviation as u8) << 2
+            | (self.fault_battery_undervoltage as u8) << 1
+            | (self.fault_battery_overvoltage as u8)
+    }
 }
 impl Into<bool> for X102Faults {
     fn into(self) -> bool {
@@ -169,11 +181,11 @@ impl std::fmt::Display for X102Faults {
 impl From<u8> for X102Faults {
     fn from(value: u8) -> Self {
         Self {
-            fault_battery_overvoltage: get_bit(value, 4),
-            fault_battery_undervoltage: get_bit(value, 3),
+            fault_battery_voltage_deviation: get_bit(value, 4),
+            fault_high_battery_temperature: get_bit(value, 3),
             fault_battery_current_deviation: get_bit(value, 2),
-            fault_high_battery_temperature: get_bit(value, 1),
-            fault_battery_voltage_deviation: get_bit(value, 0),
+            fault_battery_undervoltage: get_bit(value, 1),
+            fault_battery_overvoltage: get_bit(value, 0),
         }
     }
 }
@@ -487,6 +499,30 @@ impl From<&CANFrame> for X201 {
             sequence:               data[0],
             approx_discharge_time:  u16::from_le_bytes([data[1], data[2]]),
             available_energy:       u16::from_le_bytes([data[3], data[4]]),
+        }
+    }
+}
+
+/// EV manufacturer-specific frame (0x700) — sent by EV every 100ms
+/// Byte layout per CHAdeMO spec: byte 0 = automaker code, bytes 1–7 = manufacturer optional.
+/// Nissan Leaf ZE1 observed payload: 01 02 00 00 06 00 00 00
+#[derive(Default, Debug, Clone, Copy, serde::Serialize)]
+pub struct X700 {
+    /// Byte 0 — Automaker code assigned by CHAdeMO Association (Nissan = 0x01)
+    pub automaker_code: u8,
+    /// Byte 1 — Manufacturer optional (Nissan: model/variant identifier, ZE1 = 0x02)
+    pub model_code: u8,
+    /// Byte 4 — Manufacturer optional (Nissan: capability or supported spec version, ZE1 = 0x06)
+    pub capability: u8,
+}
+
+impl From<&CANFrame> for X700 {
+    fn from(frame: &CANFrame) -> Self {
+        let data = data_sanity(&frame, 0x700, 8);
+        X700 {
+            automaker_code: data[0],
+            model_code:     data[1],
+            capability:     data[4],
         }
     }
 }

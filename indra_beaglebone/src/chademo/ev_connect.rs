@@ -217,10 +217,16 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
         match timeout(Duration::from_millis(200), recv_send(can, chademo, false)).await {
             Ok(Ok(_)) => (),
             Ok(Err(e)) => {
-                log::error!("CAN error on closure | {:?}", e);
+                match e {
+                    crate::error::IndraError::Error =>
+                        log::error!("EV fault active on closure | faults=[{}]", chademo.x102.faults()),
+                    _ =>
+                        log::error!("CAN error on closure | {:?}", e),
+                }
                 if !contactors {
                     break;
                 }
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
             Err(e) => {
                 log::warn!("CAN timed out on closure | {:?}", e);
@@ -232,7 +238,8 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
 
         if matches!(chademo.pins().k.get_value(), Ok(0)) {
             log::info!("Awaiting K line release");
-            continue;
+            continue; // back to top of loop -- wait for K line to drop before opening contactors and cutting power
+            log::info!("K line released");
         };
         if contactors {
             log::info!("Contactors opening");
@@ -246,7 +253,7 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
                     chademo.x109.status = X109Status::from(0x25);
                     let x102status: u8 = chademo.x102.status.into();
                     if chademo.x102.fault() {
-                        log::error!("OBD2 FAULT: EV reported fault bits on session end | x102=0x{:02x} faults=[{}] -- check car for DTC codes", x102status, chademo.x102.faults());
+                        log::error!("EV reported fault on shutdown | status=0x{:02x} fault_byte=0x{:02x} faults=[{}] -- check car for DTC codes", x102status, chademo.x102.fault_byte(), chademo.x102.faults());
                     }
                     continue;
                 }
@@ -292,6 +299,7 @@ async fn charge_mode(
     let mut last_amps = PREDATA.lock().await.get_dc_setpoint_amps();
     let mut last_meter = 0.01;
     let mut counter = 0;
+    let mut last_faults = chademo_v2::X102Faults::default();
 
     // PID state -- shared across all meter-based modes.
     let mut dv: f32 = 0.0;
@@ -304,11 +312,21 @@ async fn charge_mode(
             sleep(Duration::from_millis(100)).await
         } else {
             recv_send(can, chademo, false).await?;
+            let current_faults = chademo.x102.faults();
+            if current_faults != last_faults {
+                let x102status: u8 = chademo.x102.status.into();
+                log::warn!(
+                    "x102 faults changed | status=0x{:02x} faults_byte=0x{:02x} faults=[{}] SoC={}% charging={}",
+                    x102status, chademo.x102.fault_byte(), current_faults, chademo.soc(),
+                    chademo.x102.status.status_vehicle_charging
+                );
+                last_faults = current_faults;
+            }
             if !chademo.status_vehicle_charging() {
                 let x102status: u8 = chademo.x102.status.into();
                 let state = *chademo.state();
                 log::warn!(
-                    "EV stopped charge | mode={:?} SoC={}% x102=0x{:02x} faults=[{}] last_amps={:.1}A",
+                    "EV cleared charge permission (5.0) | mode={:?} SoC={}% status=0x{:02x} faults=[{}] last_amps={:.1}A",
                     state, chademo.soc(), x102status, chademo.x102.faults(), last_amps
                 );
                 break if state.is_quit() { state } else { Idle };
@@ -385,6 +403,8 @@ async fn charge_mode(
             }
             _ => continue,
         };
+
+        chademo.x109.output_voltage = PREDATA.lock().await.get_dc_output_volts();
 
         if &last_volts != chademo.target_voltage() {
             last_volts = *chademo.target_voltage();
