@@ -506,7 +506,7 @@
 				<span class="text-surface-400 whitespace-nowrap">AC input</span>      <span class="font-mono">{p.ac_amps.toFixed(1)} A</span>
 				<span class="text-surface-400 whitespace-nowrap">DC bus</span>        <span class="font-mono">{p.dc_bus_volts.toFixed(1)} V</span>
 				<span class="text-surface-400 whitespace-nowrap">Fan duty</span>      <span class="font-mono">{p.fan_duty}%</span>
-				<span class="text-surface-400 whitespace-nowrap">Enabled</span>       <span class="font-mono">{p.enabled ? 'yes' : 'no'}</span>
+				<span class="text-surface-400 whitespace-nowrap">Enabled</span>       <span class="flex justify-end"><span class={okDot(p.enabled)}></span></span>
 				<span class="text-surface-400 whitespace-nowrap">Status bytes</span>
 				<div>
 					<span class="font-mono">0x{p.status[0].toString(16).padStart(2,'0')} 0x{p.status[1].toString(16).padStart(2,'0')}</span>
@@ -533,6 +533,7 @@
 			<div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
 				<span class="text-surface-400 whitespace-nowrap">DC voltage SP</span> <span class="font-mono">{p.dc_output_volts_setpoint.toFixed(1)} V</span>
 				<span class="text-surface-400 whitespace-nowrap">DC current SP</span> <span class="font-mono">{p.dc_output_amps_setpoint.toFixed(1)} A</span>
+				<span class="text-surface-400 whitespace-nowrap">Enabled</span>       <span class="flex justify-end"><span class={okDot(p.enabled)}></span></span>
 			</div>
 			{:else}
 			<div class="text-xs text-surface-400">No data</div>

@@ -300,6 +300,8 @@ async fn charge_mode(
     let mut last_meter = 0.01;
     let mut counter = 0;
     let mut last_faults = chademo_v2::X102Faults::default();
+    let mut pre_diverge_since:  Option<Instant> = None;
+    let mut pre_diverge_logged: bool            = false;
 
     // PID state -- shared across all meter-based modes.
     let mut dv: f32 = 0.0;
@@ -404,7 +406,29 @@ async fn charge_mode(
             _ => continue,
         };
 
-        chademo.x109.output_voltage = PREDATA.lock().await.get_dc_output_volts();
+        {
+            let pre = PREDATA.lock().await;
+            chademo.x109.output_voltage = pre.get_dc_output_volts();
+            let pre_sp      = pre.get_dc_setpoint_amps();
+            let pre_act     = pre.get_dc_output_amps();
+            let pre_enabled = pre.enabled();
+            drop(pre);
+            if (pre_sp - pre_act).abs() > 0.2 {
+                let since = pre_diverge_since.get_or_insert_with(Instant::now);
+                if !pre_diverge_logged && since.elapsed().as_secs() >= 10 {
+                    log::info!("PRE amps divergence >10s | SP={:.1}A actual={:.1}A diff={:.1}A enabled={}",
+                        pre_sp, pre_act, (pre_sp - pre_act).abs(), pre_enabled);
+                    pre_diverge_logged = true;
+                }
+            } else {
+                if pre_diverge_logged {
+                    log::info!("PRE amps divergence resolved | SP={:.1}A actual={:.1}A",
+                        pre_sp, pre_act);
+                }
+                pre_diverge_since  = None;
+                pre_diverge_logged = false;
+            }
+        }
 
         if &last_volts != chademo.target_voltage() {
             last_volts = *chademo.target_voltage();

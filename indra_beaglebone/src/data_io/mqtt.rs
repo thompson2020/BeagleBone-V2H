@@ -428,6 +428,21 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         publish_one_discovery(client, format!("homeassistant/binary_sensor/{}/config", id), payload).await;
     }
  
+    // PRE enabled read-back -- separate from supervisory binary sensors as it uses a different path
+    publish_one_discovery(client, "homeassistant/binary_sensor/beaglebone_v2h_pre_enabled/config".to_string(), json!({
+        "unique_id": "beaglebone_v2h_pre_enabled",
+        "object_id": "beaglebone_v2h_pre_enabled",
+        "name": "PRE Enabled",
+        "state_topic": state,
+        "value_template": "{{ value_json.pre.enabled | lower }}",
+        "payload_on": "true",
+        "payload_off": "false",
+        "availability_topic": avail,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "device": device.clone(),
+    })).await;
+
     let cmd_topic = format!("{}/command", cfg.base_topic);
 
     // Operator settings switches: read + write boolean settings
