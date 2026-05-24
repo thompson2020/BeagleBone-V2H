@@ -128,32 +128,6 @@ views:
                       - sensor.energy_import_iog_offpeak
                     name: Grid(Import)
                     color: '#455a64'
-                  - type: entity
-                    entity_id: input_number.solar_generation_yellow_kwh
-                    children:
-                      - House
-                      - sensor.myenergi_zappi_22323585_energy_used_today
-                      - sensor.eddi_energy_peak
-                      - sensor.eddi_energy_offpeak
-                      - sensor.smart_meter_electricity_export
-                    name: Solar (Yellow)
-                    color: var(--warning-color)
-                  - type: entity
-                    entity_id: sensor.sdm120solar_sdm120solar_export
-                    children:
-                      - House
-                      - sensor.eddi_energy_peak
-                      - sensor.smart_meter_electricity_export
-                      - sensor.sdm230indra_sdm230indra_import
-                    name: Solar (Blue)
-                    color: var(--warning-color)
-                  - type: entity
-                    entity_id: sensor.sdm230indra_sdm230indra_export
-                    children:
-                      - House
-                      - sensor.smart_meter_electricity_export
-                    name: Battery (Blue)
-                    color: '#f06292'
               - entities:
                   - type: entity
                     entity_id: sensor.energy_import_iog_peak
@@ -166,35 +140,36 @@ views:
                     children:
                       - House
                       - sensor.myenergi_zappi_22323585_energy_used_today
-                      - sensor.eddi_energy_offpeak
+                      - entity_id: sensor.myenergi_eddi_24456595_energy_used_today
+                        connection_entity_id: sensor.eddi_energy_offpeak
                       - sensor.sdm230indra_sdm230indra_import
                     name: Grid(Off Peak)
                     color: '#00CD96'
-                  - type: passthrough
-                    entity_id: House
-                    children: []
-                    name: House
-                    color: '#7e57c2'
-                  - type: passthrough
-                    entity_id: sensor.myenergi_zappi_22323585_energy_used_today
-                    children: []
-                    name: EV
-                    color: '#43a047'
-                  - type: passthrough
-                    entity_id: sensor.eddi_energy_peak
-                    children: []
-                    name: Water Heater(Peak)
-                    color: '#00bcd4'
-                  - type: passthrough
-                    entity_id: sensor.eddi_energy_offpeak
-                    children: []
-                    name: Water Heater(OffPeak)
-                    color: '#00bcd4'
-                  - type: passthrough
-                    entity_id: sensor.smart_meter_electricity_export
-                    children: []
-                    name: Grid(Net Export)
-                    color: '#43a047'
+                  - type: entity
+                    entity_id: input_number.solar_generation_yellow_kwh
+                    children:
+                      - House
+                      - sensor.myenergi_zappi_22323585_energy_used_today
+                      - sensor.smart_meter_electricity_export
+                    name: Solar (Yellow)
+                    color: var(--warning-color)
+                  - type: entity
+                    entity_id: sensor.sdm120solar_sdm120solar_export
+                    children:
+                      - House
+                      - entity_id: sensor.myenergi_eddi_24456595_energy_used_today
+                        connection_entity_id: sensor.eddi_energy_peak
+                      - sensor.smart_meter_electricity_export
+                      - sensor.sdm230indra_sdm230indra_import
+                    name: Solar (Blue)
+                    color: var(--warning-color)
+                  - type: entity
+                    entity_id: sensor.sdm230indra_sdm230indra_export
+                    children:
+                      - House
+                      - sensor.smart_meter_electricity_export
+                    name: Battery (Blue)
+                    color: '#f06292'
               - entities:
                   - type: remaining_parent_state
                     entity_id: House
@@ -207,15 +182,10 @@ views:
                     name: EV
                     color: '#43a047'
                   - type: entity
-                    entity_id: sensor.eddi_energy_offpeak
+                    entity_id: sensor.myenergi_eddi_24456595_energy_used_today
                     children: []
-                    name: Water Heater(OffPeak)
+                    name: Water Heater
                     color: '#00bcd4'
-                  - type: entity
-                    entity_id: sensor.eddi_energy_peak
-                    children: []
-                    name: Water Heater(Peak)
-                    color: '#8fdc7a'
                   - type: entity
                     entity_id: sensor.smart_meter_electricity_export
                     children: []
