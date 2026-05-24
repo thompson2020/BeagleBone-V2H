@@ -1,10 +1,15 @@
 alias: Publish Smart EV Drain Protection → mbmd MQTT
-description: Send Zappi + Eddi Power Readings as clean JSON
+description: >-
+  Send Zappi power reading as clean JSON. Eddi excluded — Eddi boost is now
+  managed by off_peak_eddi_boost and smart_charge_export_eddi automations so
+  its load should not trigger EV drain protection.
+  To re-include Eddi: restore the trigger entity and eddi sensor in the payload
+  (sensor.myenergi_eddi_24456595_internal_load_ct1).
 triggers:
   - trigger: state
     entity_id:
       - sensor.myenergi_zappi_22323585_internal_load_ct1
-      - sensor.myenergi_eddi_24456595_internal_load_ct1
+      # - sensor.myenergi_eddi_24456595_internal_load_ct1
     for:
       seconds: 1
   - trigger: time_pattern
@@ -17,8 +22,8 @@ actions:
       retain: true
       payload: |-
         {
-          "ev_drain_protection": {{ 1 if (states('sensor.myenergi_zappi_22323585_internal_load_ct1') | float(0) > 0 or states('sensor.myenergi_eddi_24456595_internal_load_ct1') | float(0) > 0) else 0 }},
+          "ev_drain_protection": {{ 1 if (states('sensor.myenergi_zappi_22323585_internal_load_ct1') | float(0) > 0) else 0 }},
           "zappi_power": {{ states('sensor.myenergi_zappi_22323585_internal_load_ct1') | float(0) | round(0) }},
-          "eddi_power": {{ states('sensor.myenergi_eddi_24456595_internal_load_ct1') | float(0) | round(0) }}
+          "eddi_power": 0
         }
 mode: single

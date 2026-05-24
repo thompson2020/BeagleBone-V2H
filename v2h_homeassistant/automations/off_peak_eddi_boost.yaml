@@ -1,0 +1,50 @@
+alias: Off-Peak Charging — Eddi Boost Control
+description: >-
+  Starts and renews Eddi boost for the duration of V2H off-peak charging (23:30–05:30).
+  The Eddi has its own internal timer but this automation is belt-and-braces.
+
+  The time_pattern trigger renews the boost every 30 minutes so it never expires
+  during the overnight window. Renewal only fires eddi_boost (never cancel), so
+  daytime time_pattern ticks are harmless no-ops.
+
+  Overnight behaviour (off_peak = on):
+    - At 23:30 (off_peak turns on): state_change trigger → eddi_boost called.
+    - Every 30 minutes while off_peak=on: renewal trigger → eddi_boost renewed.
+    - At 05:30 (off_peak turns off): state_change trigger → eddi_boost_cancel called.
+
+  Daytime behaviour (off_peak = off):
+    - time_pattern fires every 30 min but off_peak=off so Branch 1 is false,
+      and Branch 2 requires state_change trigger id → nothing happens.
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.v2h_off_peak_charging_active
+    id: state_change
+    for:
+      seconds: 1
+  - trigger: time_pattern
+    minutes: /30
+    id: renewal
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: binary_sensor.v2h_off_peak_charging_active
+            state: "on"
+        sequence:
+          - action: script.eddi_boost_heater_1
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.id == 'state_change' }}"
+          - condition: state
+            entity_id: binary_sensor.v2h_off_peak_charging_active
+            state: "off"
+        sequence:
+          - action: script.eddi_boost_cancel
+  - action: logbook.log
+    data:
+      name: Eddi Boost — Off-Peak
+      message: >-
+        trigger={{ trigger.id }}
+        off_peak={{ states('binary_sensor.v2h_off_peak_charging_active') }}
+        → Boost updated
+mode: single

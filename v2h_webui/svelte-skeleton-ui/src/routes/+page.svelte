@@ -166,6 +166,7 @@
 	let snapshotMode = '';
 	let snapshotSoc = 0;
 	let snapshotDcKw = 0;
+	let snapshotDcAmps = 0;
 	let snapshotMeterW = 0;
 	let snapshotPhaseW = 0;
 	let snapshotChargerW = 0;
@@ -208,13 +209,24 @@
 	$: acBarColor = snapshotChargerW > 50 ? 'bg-emerald-500' : snapshotChargerW < -50 ? 'bg-blue-400' : 'bg-surface-400';
 
 	$: activeModeLabel =
-		snapshotReadyToDriveActive           ? 'Ready to Drive' :
-		snapshotOffPeakChargingActive        ? 'Off-Peak Charging' :
-		snapshotSmartExportActive            ? 'Smart Export' :
-		snapshotSmartExportExcessSolarActive ? 'Smart Export Excess Solar' :
-		snapshotSmartChargeActive            ? 'Smart Charge' :
-		snapshotEvDrainProtectionActive      ? 'EV Drain Protection' :
-		selfUse                              ? 'Self-Use' : '—';
+		snapshotReadyToDriveActive      ? 'Ready to Drive' :
+		snapshotOffPeakChargingActive   ? 'Off-Peak Charging' :
+		snapshotSmartExportActive       ? 'Smart Export' :
+		snapshotSmartChargeActive       ? 'Smart Charge' :
+		snapshotEvDrainProtectionActive ? 'EV Drain Protection' :
+		selfUse                         ? 'Self-Use' : '—';
+
+	$: activeModeQualifier =
+		snapshotReadyToDriveActive    && snapshotSoc >= readyToDriveSoc   ? 'Holding' :
+		snapshotOffPeakChargingActive && snapshotSoc >= v2hBoostSocMax    ? 'at max' :
+		snapshotSmartChargeActive     && snapshotSoc >= soc_range_value   ? 'at max' :
+		snapshotSmartExportActive     && snapshotSoc <= smartExportSocMin ? 'at min' :
+		activeModeLabel === 'Self-Use' && snapshotDcAmps > 0.05  ? `Charging ${snapshotDcAmps.toFixed(1)} A` :
+		activeModeLabel === 'Self-Use' && snapshotDcAmps < -0.05 ? `Discharging ${Math.abs(snapshotDcAmps).toFixed(1)} A` :
+		activeModeLabel === 'Self-Use' && snapshotSoc >= v2h_soc_max ? 'at max' :
+		activeModeLabel === 'Self-Use' && snapshotSoc <= v2h_soc_min ? 'at min' :
+		activeModeLabel === 'Self-Use' && (exportExcessSolar || snapshotSmartExportExcessSolarActive) && Math.abs(latest?.pre?.dc_output_amps_setpoint ?? 0) < 0.05 && snapshotMeterW < 0 ? 'Paused — Solar Exporting' :
+		'';
 
 	$: batteryFillW = Math.max(0, (snapshotSoc / 100) * 38);
 	$: batteryColor = snapshotSoc > 50 ? '#22c55e' : snapshotSoc > 25 ? '#f59e0b' : '#ef4444';
@@ -340,6 +352,7 @@
 					: (rawState ?? '');
 				snapshotSoc    = d.chademo?.soc ?? 0;
 				snapshotDcKw   = (d.pre?.dc_output_volts ?? 0) * (d.pre?.dc_output_amps ?? 0);
+				snapshotDcAmps = d.pre?.dc_output_amps ?? 0;
 				snapshotMeterW = d.meter?.total_w ?? 0;
 				snapshotPhaseW   = d.meter?.phase_w   ?? 0;
 				snapshotChargerW = d.meter?.charger_w ?? 0;
@@ -390,7 +403,7 @@
 	<!-- Operational Mode Card -->
 	<div class="card p-4 text-center w-72 transition-opacity {!wsConnected ? 'opacity-40' : ''}">
 		<div class="text-2xl font-bold mb-1 inline-block rounded-lg px-4 py-1 {modePillClass}">{snapshotMode || '—'}</div>
-		<div class="text-xs text-surface-400 mb-4">{activeModeLabel}</div>
+		<div class="text-xs text-surface-400 mb-4">{activeModeLabel}{activeModeQualifier ? ` (${activeModeQualifier})` : ''}</div>
 		<div class="text-sm font-semibold text-surface-500 dark:text-surface-400 mb-1">Battery</div>
 		<div class="text-2xl font-bold mb-1">{Math.round(snapshotSoc)}%</div>
 		<div class="flex items-center justify-center gap-2 mb-3">
@@ -505,6 +518,23 @@
 				</label>
 			</div>
 
+			<div class="text-sm">
+				<div class="flex items-center justify-between">
+					<button type="button" class="flex items-center gap-1 hover:text-primary-500 transition-colors mr-2" on:click={() => (showSmartExportExcessSolarOptions = !showSmartExportExcessSolarOptions)}>
+						<span class="text-xs w-3 text-center">{showSmartExportExcessSolarOptions ? '▼' : '▶'}</span>
+						<span>Smart Export Excess Solar</span>
+						<span class={ledClass(snapshotSmartExportExcessSolarRequest, snapshotSmartExportExcessSolarActive)}></span>
+					</button>
+					<label class="relative inline-flex items-center cursor-pointer">
+						<input type="checkbox" bind:checked={smartExportExcessSolar} class="sr-only peer" on:change={sendSettings} />
+						<div class="w-9 h-5 bg-surface-300 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+					</label>
+				</div>
+				{#if showSmartExportExcessSolarOptions}
+					<div class="mt-1 ml-4 text-xs text-surface-400">Exports when solar export rate &gt; overnight import rate</div>
+				{/if}
+			</div>
+
 			<div class="mt-1 text-xs font-semibold text-surface-500 dark:text-surface-400">Time / Event Based Controls</div>
 
 			<div class="text-sm">
@@ -597,23 +627,6 @@
 							</div>
 						</div>
 					</div>
-				{/if}
-			</div>
-
-			<div class="text-sm">
-				<div class="flex items-center justify-between">
-					<button type="button" class="flex items-center gap-1 hover:text-primary-500 transition-colors mr-2" on:click={() => (showSmartExportExcessSolarOptions = !showSmartExportExcessSolarOptions)}>
-						<span class="text-xs w-3 text-center">{showSmartExportExcessSolarOptions ? '▼' : '▶'}</span>
-						<span>Smart Export Excess Solar</span>
-						<span class={ledClass(snapshotSmartExportExcessSolarRequest, snapshotSmartExportExcessSolarActive)}></span>
-					</button>
-					<label class="relative inline-flex items-center cursor-pointer">
-						<input type="checkbox" bind:checked={smartExportExcessSolar} class="sr-only peer" on:change={sendSettings} />
-						<div class="w-9 h-5 bg-surface-300 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
-					</label>
-				</div>
-				{#if showSmartExportExcessSolarOptions}
-					<div class="mt-1 ml-4 text-xs text-surface-400">Exports when solar export rate &gt; overnight import rate</div>
 				{/if}
 			</div>
 

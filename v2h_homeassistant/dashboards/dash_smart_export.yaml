@@ -138,10 +138,11 @@ views:
 
                   Publish SmartCharge → mbmd MQTT   
 
-                  ## 🧪 smartexport_status disable Zappi & Eddi Control
-                  Settings-> Automation 
+                  ## SmartExport → Zappi Control
+                  Settings → Automations → Publish SmartExport → Zappi Control (Eddi handled separately)
 
-                  Publish SmartExport → Zappi & Eddi Control  
+                  Eddi is now controlled by **Publish SmartCharge & SmartExport → Eddi Boost Control**
+                  which applies an off-peak guard so overnight Eddi boost is not cancelled by smart export.
           - type: tile
             entity: select.myenergi_zappi_22323585_charge_mode
             vertical: false

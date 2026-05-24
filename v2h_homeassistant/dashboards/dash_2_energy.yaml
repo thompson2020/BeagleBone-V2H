@@ -1,0 +1,529 @@
+views:
+  - type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: custom:energy-flow-card-plus
+            entities:
+              grid:
+                entity:
+                  consumption: sensor.smart_meter_electricity_import
+                  production: sensor.smart_meter_electricity_export
+                secondary_info:
+                  entity: sensor.smart_meter_electricity_power_selected
+                  unit_of_measurement: W
+                  unit_white_space: true
+                  color_value: true
+                color:
+                  production: var(--warning-color)
+                  consumption: '#455a64'
+                use_metadata: false
+              solar:
+                entity: sensor.sdm120solar_sdm120solar_export
+                color: var(--warning-color)
+                secondary_info:
+                  entity: sensor.sdm120solar_sdm120solar_power_inverted
+                  unit_of_measurement: W
+                  icon: ''
+                  color_value: true
+                  unit_white_space: true
+                  decimals: 0
+                  display_zero: true
+                color_value: false
+                color_icon: true
+              battery:
+                entity:
+                  consumption: sensor.sdm230indra_sdm230indra_import
+                  production: sensor.sdm230indra_sdm230indra_export
+                state_of_charge: sensor.v2h_soc
+                state_of_charge_unit: '%'
+                invert_state: false
+                color_value: true
+              individual:
+                - entity: sensor.myenergi_zappi_22323585_energy_used_today
+                  name: EV
+                  icon: mdi:car-electric
+                  color: '#43a047'
+                  color_icon: true
+                  calculate_flow_rate: true
+                  secondary_info:
+                    entity: sensor.myenergi_zappi_22323585_internal_load_ct1
+                    unit_of_measurement: W
+                    unit_white_space: true
+                    color_value: true
+                  display_zero: true
+                - entity: sensor.myenergi_eddi_24456595_energy_used_today
+                  name: Water
+                  icon: mdi:water-boiler
+                  color: '#00bcd4'
+                  color_icon: true
+                  secondary_info:
+                    entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+                    unit_of_measurement: W
+                    unit_white_space: true
+                    color_value: true
+                  display_zero: true
+              home:
+                subtract_individual: true
+                circle_animation: true
+                use_metadata: true
+                override_state: false
+                hide: false
+            clickable_entities: true
+            display_zero_lines:
+              mode: show
+              transparency: 50
+              grey_color:
+                - 189
+                - 189
+                - 189
+            use_new_flow_rate_model: true
+            base_decimals: 0
+            kilo_decimals: 1
+            min_flow_rate: 1
+            max_flow_rate: 6
+            max_expected_power: 8000
+            min_expected_power: 1
+            kilo_threshold: 1
+            mega_threshold: 1000000
+            transparency_zero_lines: 1
+            sort_individual_devices: false
+            disable_dots: false
+            energy_date_selection: true
+            no_labels: false
+            allow_layout_break: false
+          - type: energy-date-selection
+            vertical_opening_direction: auto
+          - type: custom:energy-period-selector-plus
+            card_background: true
+            today_button: true
+            prev_next_buttons: true
+            compare_button_type: ''
+            today_button_type: text
+            period_buttons:
+              - week
+              - month
+              - year
+              - day
+      - type: grid
+        cards:
+          - type: custom:sankey-chart
+            layout: horizontal
+            height: 520
+            unit_prefix: k
+            round: 1
+            convert_units_to: ''
+            co2_intensity_entity: sensor.co2_signal_co2_intensity
+            min_box_size: 3
+            min_box_distance: 5
+            min_state: 0
+            show_states: true
+            show_units: true
+            sections:
+              - entities:
+                  - type: entity
+                    entity_id: sensor.smart_meter_electricity_import
+                    children:
+                      - sensor.energy_import_iog_peak
+                      - sensor.energy_import_iog_offpeak
+                    name: Grid(Import)
+                    color: '#455a64'
+                  - type: entity
+                    entity_id: input_number.solar_generation_yellow_kwh
+                    children:
+                      - House
+                      - sensor.myenergi_zappi_22323585_energy_used_today
+                      - sensor.eddi_energy_peak
+                      - sensor.eddi_energy_offpeak
+                      - sensor.smart_meter_electricity_export
+                    name: Solar (Yellow)
+                    color: var(--warning-color)
+                  - type: entity
+                    entity_id: sensor.sdm120solar_sdm120solar_export
+                    children:
+                      - House
+                      - sensor.eddi_energy_peak
+                      - sensor.smart_meter_electricity_export
+                      - sensor.sdm230indra_sdm230indra_import
+                    name: Solar (Blue)
+                    color: var(--warning-color)
+                  - type: entity
+                    entity_id: sensor.sdm230indra_sdm230indra_export
+                    children:
+                      - House
+                      - sensor.smart_meter_electricity_export
+                    name: Battery (Blue)
+                    color: '#f06292'
+              - entities:
+                  - type: entity
+                    entity_id: sensor.energy_import_iog_peak
+                    children:
+                      - House
+                    name: Grid(Peak)
+                    color: '#EB8CE6'
+                  - type: entity
+                    entity_id: sensor.energy_import_iog_offpeak
+                    children:
+                      - House
+                      - sensor.myenergi_zappi_22323585_energy_used_today
+                      - sensor.eddi_energy_offpeak
+                      - sensor.sdm230indra_sdm230indra_import
+                    name: Grid(Off Peak)
+                    color: '#00CD96'
+                  - type: passthrough
+                    entity_id: House
+                    children: []
+                    name: House
+                    color: '#7e57c2'
+                  - type: passthrough
+                    entity_id: sensor.myenergi_zappi_22323585_energy_used_today
+                    children: []
+                    name: EV
+                    color: '#43a047'
+                  - type: passthrough
+                    entity_id: sensor.eddi_energy_peak
+                    children: []
+                    name: Water Heater(Peak)
+                    color: '#00bcd4'
+                  - type: passthrough
+                    entity_id: sensor.eddi_energy_offpeak
+                    children: []
+                    name: Water Heater(OffPeak)
+                    color: '#00bcd4'
+                  - type: passthrough
+                    entity_id: sensor.smart_meter_electricity_export
+                    children: []
+                    name: Grid(Net Export)
+                    color: '#43a047'
+              - entities:
+                  - type: remaining_parent_state
+                    entity_id: House
+                    children: []
+                    name: House
+                    color: '#7e57c2'
+                  - type: entity
+                    entity_id: sensor.myenergi_zappi_22323585_energy_used_today
+                    children: []
+                    name: EV
+                    color: '#43a047'
+                  - type: entity
+                    entity_id: sensor.eddi_energy_offpeak
+                    children: []
+                    name: Water Heater(OffPeak)
+                    color: '#00bcd4'
+                  - type: entity
+                    entity_id: sensor.eddi_energy_peak
+                    children: []
+                    name: Water Heater(Peak)
+                    color: '#8fdc7a'
+                  - type: entity
+                    entity_id: sensor.smart_meter_electricity_export
+                    children: []
+                    name: Grid(Net Export)
+                    color: '#43a047'
+                  - type: entity
+                    entity_id: sensor.sdm230indra_sdm230indra_import
+                    children: []
+                    name: Battery(Charge)
+                    color: '#f06292'
+                sort_by: none
+                sort_group_by_parent: false
+            gas_co2_intensity: 2351.6459999999997
+            show_names: true
+            energy_date_selection: true
+            grid_options:
+              columns: full
+            column_span: 3
+        column_span: 3
+      - type: grid
+        cards:
+          - type: heading
+            heading: Energy summary
+            grid_options:
+              columns: full
+              rows: auto
+            heading_style: title
+          - type: custom:config-template-card
+            grid_options:
+              columns: full
+              rows: auto
+            entities:
+              - input_number.apex_chart_day_offset
+            card:
+              type: horizontal-stack
+              cards:
+                - type: tile
+                  entity: input_number.apex_chart_day_offset
+                  name: Day offset
+                  features:
+                    - type: numeric-input
+                      style: buttons
+                - type: button
+                  name: Today
+                  icon: mdi:calendar-today
+                  tap_action:
+                    action: call-service
+                    service: input_number.set_value
+                    service_data:
+                      value: 0
+                      entity_id: input_number.apex_chart_day_offset
+                  show_state: false
+                - type: tile
+                  entity: sensor.apex_chart_selected_date
+                  name: Showing
+                - type: statistic
+                  entity: sensor.sdm120solar_sdm120solar_export
+                  name: Solar
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #ff9800;
+                      }
+                      .value { color: #ff9800 !important; }
+                - type: statistic
+                  entity: sensor.energy_import_iog_offpeak
+                  name: Off peak
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #00cf95;
+                      }
+                      .value { color: #00cf95 !important; }
+                - type: statistic
+                  entity: sensor.energy_import_iog_peak
+                  name: Peak
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #ff80c0;
+                      }
+                      .value { color: #ff80c0 !important; }
+                - type: statistic
+                  entity: sensor.sdm230indra_sdm230indra_export
+                  name: Battery discharge
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #42a5f5;
+                      }
+                      .value { color: #42a5f5 !important; }
+                - type: statistic
+                  entity: sensor.sdm230indra_sdm230indra_import
+                  name: Battery charge
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #42a5f5;
+                      }
+                      .value { color: #42a5f5 !important; }
+                - type: statistic
+                  entity: sensor.smart_meter_electricity_export
+                  name: Export
+                  period:
+                    calendar:
+                      period: day
+                      offset: >-
+                        ${
+                        parseInt(states['input_number.apex_chart_day_offset'].state)
+                        }
+                  stat_type: change
+                  card_mod:
+                    style: |
+                      ha-card {
+                        border-top: 4px solid #ff80c0;
+                      }
+                      .value { color: #ff80c0 !important; }
+          - type: custom:config-template-card
+            grid_options:
+              columns: full
+              rows: auto
+            entities:
+              - input_number.apex_chart_day_offset
+            card:
+              type: custom:apexcharts-card
+              header:
+                title: Energy flow (30-min bars)
+                show: true
+                show_states: false
+                colorize_states: false
+              experimental:
+                brush: true
+              graph_span: 24h
+              span:
+                start: day
+                offset: >-
+                  ${
+                  (parseInt(states['input_number.apex_chart_day_offset'].state)
+                  >= 0 ? '+' : '') +
+                  parseInt(states['input_number.apex_chart_day_offset'].state) +
+                  'd' }
+              stacked: true
+              apex_config:
+                chart:
+                  height: 350
+                  stacked: true
+                  stackType: normal
+                  toolbar:
+                    show: true
+                    tools:
+                      zoom: true
+                      zoomin: true
+                      zoomout: true
+                      pan: true
+                      reset: true
+                xaxis:
+                  labels:
+                    datetimeFormatter:
+                      hour: HH
+                legend:
+                  show: false
+                plotOptions:
+                  bar:
+                    columnWidth: 80%
+                tooltip:
+                  x:
+                    format: HH:mm
+              yaxis:
+                - decimals: 0
+                  apex_config:
+                    title:
+                      text: kWh
+                    forceNiceScale: false
+                    stepSize: 1
+              series:
+                - entity: sensor.sdm120solar_sdm120solar_export
+                  name: Solar
+                  type: column
+                  color: '#ff9800'
+                  unit: ' kWh'
+                  stack_group: energy
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.energy_import_iog_offpeak
+                  name: Off peak
+                  type: column
+                  color: '#00cf95'
+                  unit: ' kWh'
+                  stack_group: energy
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.energy_import_iog_peak
+                  name: Peak
+                  type: column
+                  color: '#ff80c0'
+                  unit: ' kWh'
+                  stack_group: energy
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.sdm230indra_sdm230indra_export
+                  name: Battery discharge
+                  type: column
+                  color: '#42a5f5'
+                  unit: ' kWh'
+                  stack_group: energy
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.sdm230indra_sdm230indra_import
+                  name: Battery charge
+                  type: column
+                  color: '#42a5f5'
+                  unit: ' kWh'
+                  stack_group: energy
+                  transform: return x * -1;
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.smart_meter_electricity_export
+                  name: Export
+                  type: column
+                  color: '#ff80c0'
+                  unit: ' kWh'
+                  stack_group: energy
+                  transform: return x * -1;
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.house_consumption_total
+                  name: House consumption
+                  type: line
+                  color: '#000000'
+                  curve: smooth
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  offset: '-15min'
+                  unit: ' kWh'
+                  group_by:
+                    func: diff
+                    duration: 30min
+        column_span: 4
+      - type: grid
+        columns: 4
+        cards:
+          - type: power-sources-graph
+            title: Power sources
+            column_span: 4
+          - type: energy-solar-graph
+            title: Solar Production
+          - type: energy-gas-graph
+            title: Pellet Boiler Consumption
+          - type: energy-sources-table
+            types:
+              - grid
+              - solar
+              - battery
+              - overview
+            show_only_totals: true
+            column_span: 2
+          - type: energy-sources-table
+            title: Grid
+            types:
+              - grid
+              - overview
+            show_only_totals: false
+            column_span: 4
+        column_span: 4

@@ -9,16 +9,52 @@ views:
         cards:
           - type: custom:mushroom-template-card
             primary: >
-              {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
-              == 'V2h'       %}V2H Active {% elif mode == 'Charge'    %}Charging
-              {% elif mode == 'Discharge' %}Discharging {% elif mode ==
-              'Idle'      %}Idle {% else                     %}{{ mode }} {%
-              endif %}
+              {% set mode = states('sensor.v2h_operation_mode') %}
+              {% if   mode == 'V2h'       %}V2H
+              {% elif mode == 'Charge'    %}Charging
+              {% elif mode == 'Discharge' %}Discharging
+              {% elif mode == 'Idle'      %}Idle
+              {% else %}{{ mode }}{% endif %}
             secondary: >
-              {% set a = states('sensor.v2h_dc_output_amps') | float(0) %} {%
-              if   a <  0 %}Discharging {{ (a | abs) | round(1) }} A {% elif a
-              >  0 %}Charging {{ a | round(1) }} A {% else        %}Standby {%
-              endif %}
+              {% set soc              = states('sensor.v2h_soc')                   | float(0) %}
+              {% set dc_amps          = states('sensor.v2h_dc_output_amps')        | float(0) %}
+              {% set grid_w           = states('sensor.v2h_grid_power')            | float(0) %}
+              {% set rtd_soc          = states('number.v2h_rtd_soc')               | float(90) %}
+              {% set offpeak_soc_max  = states('number.v2h_soc_max_boost')         | float(80) %}
+              {% set charge_soc_limit = states('number.v2h_charge_soc_limit')      | float(80) %}
+              {% set export_soc_min   = states('number.v2h_smart_export_soc_min')  | float(30) %}
+              {% set v2h_soc_max      = states('number.v2h_soc_max')               | float(90) %}
+              {% set v2h_soc_min      = states('number.v2h_soc_min')               | float(30) %}
+              {% set solar_flag       = is_state('switch.v2h_export_excess_solar', 'on')
+                                     or is_state('binary_sensor.v2h_smart_export_solar_active', 'on') %}
+              {% if   is_state('binary_sensor.v2h_ready_to_drive_active',   'on') %}
+                {% set label = 'Ready to Drive' %}
+                {% set q = '(Holding)' if soc >= rtd_soc else '' %}
+              {% elif is_state('binary_sensor.v2h_off_peak_charging_active','on') %}
+                {% set label = 'Off-Peak Charging' %}
+                {% set q = '(at max)' if soc >= offpeak_soc_max else '' %}
+              {% elif is_state('binary_sensor.v2h_smart_export_active',     'on') %}
+                {% set label = 'Smart Export' %}
+                {% set q = '(at min)' if soc <= export_soc_min else '' %}
+              {% elif is_state('binary_sensor.v2h_smart_charge_active',     'on') %}
+                {% set label = 'Smart Charge' %}
+                {% set q = '(at max)' if soc >= charge_soc_limit else '' %}
+              {% elif is_state('binary_sensor.v2h_ev_drain_protection_active','on') %}
+                {% set label = 'EV Drain Protection' %}
+                {% set q = '' %}
+              {% elif is_state('switch.v2h_self_use', 'on') %}
+                {% set label = 'Self-Use' %}
+                {% if   dc_amps >  0.05 %}{% set q = '(Charging '    ~ dc_amps | round(1) ~ ' A)' %}
+                {% elif dc_amps < -0.05 %}{% set q = '(Discharging ' ~ (dc_amps | abs | round(1)) ~ ' A)' %}
+                {% elif soc >= v2h_soc_max %}{% set q = '(at max)' %}
+                {% elif soc <= v2h_soc_min %}{% set q = '(at min)' %}
+                {% elif solar_flag and dc_amps | abs < 0.05 and grid_w < 0 %}{% set q = '(Paused — Solar Exporting)' %}
+                {% else %}{% set q = '' %}{% endif %}
+              {% else %}
+                {% set label = '—' %}
+                {% set q = '' %}
+              {% endif %}
+              {{ label }}{% if q %} {{ q }}{% endif %}
             icon: >
               {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
               == 'V2h'       %}mdi:home-battery {% elif mode == 'Charge'   
@@ -225,8 +261,10 @@ views:
                   color: var(--red-color);
                 }
 
-
                 ha-card::marker {
+                }
+                ha-card > div {
+                  position: relative;
                 }
                 ha-card > div::before {
                   content: "Grid W";
@@ -237,7 +275,16 @@ views:
                   font-weight: 500;
                   color: var(--primary-text-color);
                 }
-                 
+
+                ha-card > div::after {
+                  content: "☀ {{ states('sensor.sdm120solar_sdm120solar_power_inverted') | float(0) | round(0) }} W";
+                  position: absolute;
+                  top: 8px;
+                  right: 10px;
+                  font-size: 11px;
+                  color: var(--secondary-text-color);
+                }
+
             segments:
               - from: -6000
                 color: var(--blue-color)
@@ -457,6 +504,71 @@ views:
                     - background-color: transparent
                     - border: none
                     - box-shadow: none
+            grid_options:
+              columns: 12
+              rows: auto
+          - type: horizontal-stack
+            cards:
+              - type: custom:button-card
+                entity: switch.v2h_smart_export_solar
+                name: Smart Export Solar
+                icon: mdi:solar-power-variant
+                tap_action:
+                  action: toggle
+                styles:
+                  card:
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_solar_request
+                name: Request
+                icon: mdi:circle-outline
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
+              - type: custom:button-card
+                entity: binary_sensor.v2h_smart_export_solar_active
+                name: Active
+                icon: mdi:circle
+                tap_action:
+                  action: none
+                styles:
+                  card:
+                    - background-color: |
+                        [[[ return entity.state === 'on'
+                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
+                    - border: |
+                        [[[ return entity.state === 'on'
+                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
+                    - height: 48px
+                  icon:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                  name:
+                    - color: |
+                        [[[ return entity.state === 'on'
+                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
+                    - font-size: 0.7em
             grid_options:
               columns: 12
               rows: auto
@@ -683,71 +795,6 @@ views:
                     - font-size: 0.7em
               - type: custom:button-card
                 entity: binary_sensor.v2h_smart_export_active
-                name: Active
-                icon: mdi:circle
-                tap_action:
-                  action: none
-                styles:
-                  card:
-                    - background-color: |
-                        [[[ return entity.state === 'on'
-                            ? 'rgba(74,222,128,0.15)' : 'var(--card-background-color)' ]]]
-                    - border: |
-                        [[[ return entity.state === 'on'
-                            ? '2px solid #4ade80' : '1px solid var(--divider-color)' ]]]
-                    - height: 48px
-                  icon:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
-                  name:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
-                    - font-size: 0.7em
-            grid_options:
-              columns: 12
-              rows: auto
-          - type: horizontal-stack
-            cards:
-              - type: custom:button-card
-                entity: switch.v2h_smart_export_solar
-                name: Smart Export Solar
-                icon: mdi:solar-power-variant
-                tap_action:
-                  action: toggle
-                styles:
-                  card:
-                    - height: 48px
-                  icon:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
-                  name:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#60a5fa' : 'var(--secondary-text-color)' ]]]
-                    - font-size: 0.7em
-              - type: custom:button-card
-                entity: binary_sensor.v2h_smart_export_solar_request
-                name: Request
-                icon: mdi:circle-outline
-                tap_action:
-                  action: none
-                styles:
-                  card:
-                    - height: 48px
-                  icon:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
-                  name:
-                    - color: |
-                        [[[ return entity.state === 'on'
-                            ? '#4ade80' : 'var(--secondary-text-color)' ]]]
-                    - font-size: 0.7em
-              - type: custom:button-card
-                entity: binary_sensor.v2h_smart_export_solar_active
                 name: Active
                 icon: mdi:circle
                 tap_action:
@@ -1204,32 +1251,32 @@ views:
                 value: ''
             value_texts:
               primary:
-                value: '{{ states(''sensor.v2h_ac_power'') | float | round(0) }}'
+                value: '{{ states(''sensor.v2h_ac_power'') | float -400 | round(0) }}'
                 color: var(--black-color)
                 unit_of_measurement: W
                 unit_before_value: false
               secondary:
-                value: '{{ states(''sensor.v2h_dc_power'') | float | round(0) }}'
+                value: '{{ states(''sensor.v2h_dc_power'') | float +400 | round(0) }}'
                 color: var(--black-color)
                 unit_of_measurement: W (DC)
                 unit_before_value: false
             min_indicator:
               type: entity
-              value: sensor.v2h_dc_power
+              value: '{{ states(''sensor.v2h_dc_power'') | float -1200 | round(0) }}'
               color: '#aaa'
               label: true
               label_color: var(--black-color)
               precision: 0
             max_indicator:
               type: entity
-              value: sensor.v2h_ac_power
+              value: '{{ states(''sensor.v2h_dc_power'') | float +1200 | round(0) }}'
               color: '#aaa'
               label: true
               label_color: var(--black-color)
               precision: 0
             setpoint:
               type: entity
-              value: sensor.v2h_efficiency
+              value: '{{ states(''sensor.v2h_efficiency'') | float +20 | round(0) }}'
               color: '#aaa'
               label: true
               label_color: var(--black-color)
@@ -1282,6 +1329,11 @@ views:
             grid_options:
               columns: 12
               rows: auto
-      - cards:
+      - type: grid
+        cards:
           - type: heading
-            heading: History
+            heading: New section
+          - type: tile
+            entity: binary_sensor.v2h_pre_enabled
+            vertical: false
+            features_position: bottom

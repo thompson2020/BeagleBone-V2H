@@ -1,0 +1,80 @@
+views:
+  - title: Home
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Kitchen
+          - type: tile
+            entity: select.kitchen_active_profile
+          - type: tile
+            entity: climate.kitchen
+      - type: grid
+        cards:
+          - type: heading
+            heading: eddi-24456595
+          - type: heading
+            icon: mdi:fridge
+            heading: Uses scripts in scripts.yaml
+            heading_style: subtitle
+          - type: tile
+            entity: select.myenergi_eddi_24456595_operating_mode
+            grid_options:
+              columns: full
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.myenergi_eddi_24456595_status
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.eddi_last_temp_reached
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+            vertical: false
+            features_position: bottom
+          - type: button
+            name: Eddi Stopped
+            icon: mdi:stop-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_set_stopped
+          - type: button
+            name: Eddi Normal
+            icon: mdi:play-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_set_normal
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_number.eddi_boost_minutes
+                name: Boost
+                icon: mdi:timer-outline
+          - type: button
+            name: Cancel
+            icon: mdi:stop-circle-outline
+            tap_action:
+              action: call-service
+              service: script.eddi_boost_cancel
+          - type: button
+            name: Boost
+            icon: mdi:flash
+            tap_action:
+              action: call-service
+              service: script.eddi_boost
+            entity: input_number.eddi_boost_minutes
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section

@@ -80,16 +80,16 @@ views:
       - type: grid
         cards:
           - type: markdown
-            content: |+
-              ## 🧪 smartcharge_status used to control eddi
-
-
-          - type: markdown
             content: |
+              ## SmartCharge & SmartExport → Eddi Boost Control
 
-              Settings-> Automation 
+              **Automation:** Publish SmartCharge & SmartExport → Eddi Boost Control
 
-              Publish SmartCharge → Eddi Boost Control
+              Turns Eddi boost ON when smart charge is active and smart export is not.
+              Turns OFF when smart charge ends or smart export overrides.
+              Does **not** cancel if V2H off-peak is active — overnight automation owns the Eddi.
+
+              Settings → Automations → Publish SmartCharge & SmartExport → Eddi Boost Control
           - type: tile
             entity: select.myenergi_eddi_24456595_operating_mode
             grid_options:
@@ -135,7 +135,7 @@ views:
             icon: mdi:flash
             tap_action:
               action: call-service
-              service: script.eddi_boost
+              service: script.eddi_boost_heater_1
             entity: input_number.eddi_boost_minutes
       - cards:
           - type: heading

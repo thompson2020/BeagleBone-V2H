@@ -3,14 +3,21 @@ views:
     sections:
       - type: grid
         cards:
+          - type: markdown
+            content: |
+              ## EV Drain Protection
+
+              Monitors Zappi load only. Eddi is excluded — Eddi boost is managed
+              by the off-peak and smart charge automations and should not trigger
+              EV drain protection.
+              To re-include Eddi: restore `sensor.myenergi_eddi_24456595_internal_load_ct1`
+              in `ev_drain_protection.yaml`.
           - type: entities
             title: Inputs
             show_header_toggle: false
             entities:
               - entity: sensor.myenergi_zappi_22323585_internal_load_ct1
                 name: Zappi Power
-              - entity: sensor.myenergi_eddi_24456595_internal_load_ct1
-                name: Eddi Power
       - type: grid
         cards:
           - type: heading

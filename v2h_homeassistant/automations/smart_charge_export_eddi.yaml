@@ -1,0 +1,56 @@
+alias: Publish SmartCharge & SmartExport → Eddi Boost Control
+description: >-
+  Starts Eddi boost when smart charge is active and smart export is not.
+  Cancels when neither condition holds. Does not cancel if off-peak is active —
+  the overnight automation owns the Eddi during that window.
+
+  Daytime behaviour (off_peak = off):
+    - smart_charge=1 AND smart_export=0 → eddi_boost_heater_1
+    - smart_charge turns off → eddi_boost_cancel
+    - smart_export turns on (overrides smart charge) → eddi_boost_cancel
+
+  Overnight behaviour (off_peak = on):
+    - smart_charge dispatch finishing triggers this automation, but the OFF branch
+      requires off_peak=off so it can never cancel overnight. The off-peak automation
+      owns the Eddi and will renew the boost every 30 minutes independently.
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.smartcharge_status
+      - sensor.smart_export_status
+    for:
+      seconds: 1
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: sensor.smartcharge_status
+            state: "1"
+          - condition: state
+            entity_id: sensor.smart_export_status
+            state: "0"
+        sequence:
+          - action: script.eddi_boost_heater_1
+      - conditions:
+          - condition: state
+            entity_id: binary_sensor.v2h_off_peak_charging_active
+            state: "off"
+          - condition: or
+            conditions:
+              - condition: state
+                entity_id: sensor.smartcharge_status
+                state: "0"
+              - condition: state
+                entity_id: sensor.smart_export_status
+                state: "1"
+        sequence:
+          - action: script.eddi_boost_cancel
+  - action: logbook.log
+    data:
+      name: Eddi Boost — Smart Charge
+      message: >-
+        off_peak={{ states('binary_sensor.v2h_off_peak_charging_active') }}
+        smart_charge={{ states('sensor.smartcharge_status') }}
+        smart_export={{ states('sensor.smart_export_status') }}
+        → Boost updated
+mode: single

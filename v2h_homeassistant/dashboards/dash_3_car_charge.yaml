@@ -1,0 +1,242 @@
+views:
+  - title: Home
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Disable Zappi Overnight
+            heading_style: title
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_boolean.off_peak_zappi_control
+          - type: tile
+            entity: select.myenergi_zappi_22323585_charge_mode
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: heading
+            heading: Zappi
+            heading_style: title
+          - type: tile
+            entity: sensor.myenergi_zappi_22323585_plug_status
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: sensor.myenergi_zappi_22323585_status
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: heading
+            heading: Octopus
+            heading_style: title
+          - type: tile
+            entity: >-
+              sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_state
+            vertical: false
+            features_position: bottom
+            grid_options:
+              '0': c
+              '1': o
+              '2': l
+              '3': u
+              columns: full
+          - type: tile
+            entity: >-
+              binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: >-
+              sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot1_start
+            vertical: false
+            features_position: bottom
+            grid_options:
+              rows: auto
+              columns: full
+          - type: tile
+            grid_options:
+              columns: full
+            entity: >-
+              sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching_planned_slot1_end
+            vertical: false
+            features_position: bottom
+          - type: vertical-stack
+            cards:
+              - type: tile
+                entity: >-
+                  binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching
+                name: Planned EV Charging Dispatches
+                icon: mdi:car-electric
+                vertical: true
+              - type: markdown
+                content: >
+                  {% set dispatches = state_attr(
+                    'binary_sensor.octopus_energy_00000000_0009_4000_8020_00000006f939_intelligent_dispatching',
+                    'planned_dispatches'
+                  ) %}
+
+                  {% if dispatches and dispatches | length > 0 %} {% for d in
+                  dispatches %} **Slot {{ loop.index }}** - Start: {{
+                    as_timestamp(d.start) | timestamp_custom('%Y-%m-%d %H:%M')
+                  }} - End: {{
+                    as_timestamp(d.end) | timestamp_custom('%H:%M')
+                  }} - Charge: {{ d.charge_in_kwh }} kWh
+
+                  {% endfor %} {% else %} No planned dispatches. {% endif %}
+          - type: heading
+            heading: Off Peak
+            heading_style: title
+          - type: tile
+            entity: >-
+              binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: >-
+              sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak_current_start
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: >-
+              sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak_current_end
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: vertical-stack
+            cards:
+              - type: tile
+                entity: >-
+                  binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak
+                name: Off-Peak / Cheap Rate
+                icon: mdi:clock-time-eight-outline
+                state_content: state
+                vertical: true
+              - type: markdown
+                content: >
+                  **Current slot starts:** {{
+                  as_timestamp(states.binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak.attributes.current_start)
+                  | timestamp_custom('%Y-%m-%d %H:%M') }}
+
+
+                  **Current slot ends:** {{
+                  as_timestamp(states.binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak.attributes.current_end)
+                  | timestamp_custom('%H:%M') }}
+
+
+                  **Next slot starts:** {{
+                  as_timestamp(states.binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak.attributes.next_start)
+                  | timestamp_custom('%Y-%m-%d %H:%M') }}
+
+
+                  **Next slot ends:** {{
+                  as_timestamp(states.binary_sensor.octopus_energy_electricity_25j0059396_1100003642142_off_peak.attributes.next_end)
+                  | timestamp_custom('%H:%M') }}
+          - type: heading
+            heading: Volvo
+            heading_style: title
+          - type: tile
+            entity: sensor.volvo_battery_soc
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: sensor.leaf_battery_level
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.myenergi_zappi_22323585_internal_load_ct1
+            vertical: false
+            features_position: bottom
+          - type: history-graph
+            title: Zappi
+            hours_to_show: 24
+            refresh_interval: 60
+            entities:
+              - entity: sensor.myenergi_zappi_22323585_power_ct_internal_load
+                name: Load (W)
+          - type: tile
+            entity: sensor.myenergi_zappi_22323585_charge_added_session
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+        column_span: 1
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Today
+          - type: custom:octopus-energy-rates-card
+            currentEntity: >-
+              event.octopus_energy_electricity_25j0059396_1100003642142_current_day_rates
+            cols: 2
+            hour12: false
+            showday: true
+            showpast: true
+            title: Octopus Import
+            unitstr: p
+            lowlimit: 15
+            mediumlimit: 20
+            highlimit: 30
+            roundUnits: 0
+            cheapest: true
+            multiplier: 100
+          - type: custom:octopus-energy-rates-card
+            currentEntity: >-
+              event.octopus_energy_electricity_25j0059396_1100003642142_previous_day_rates
+            cols: 2
+            hour12: false
+            showday: true
+            showpast: true
+            title: Yesterday
+            unitstr: p
+            lowlimit: 15
+            mediumlimit: 20
+            highlimit: 30
+            roundUnits: 0
+            cheapest: true
+            multiplier: 100
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+          - type: markdown
+            content: |
+              ## TO DO
+
+              **Logic — turn ON when all true:**
+              - Octopus off-peak dispatch is active
+              - Now is before `current_end` of dispatch window
+              - Zappi load > 0W  **OR**  within current 30-min block (grace)
+
+              ADD 
+              OR INTELLIGENT DISPATCHING SIGNALS COME ON 
+                1 - CREATE 2 SENSORS -
+                    SLOT 1 START
+                    SLOT 1 END
+
+
+
+              **Turn OFF at the earlier of:**
+              - `current_end` timestamp from off-peak sensor
+              - End of current 30-min block once Zappi drops to 0W
+
+              Automation publishes to `indra_from_ha/smartcharge/status`

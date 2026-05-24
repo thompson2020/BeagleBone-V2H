@@ -1,0 +1,139 @@
+title: Off-Peak Control
+views:
+  - title: Off-Peak
+    path: off-peak
+    icon: mdi:weather-night
+    type: sections
+    sections:
+
+      - type: grid
+        cards:
+          - type: markdown
+            content: |
+              ## Off-Peak Zappi Control
+              **Automation:** Off-Peak Charging — Disable/Enable Zappi
+
+              **Logic:**
+              - At **23:10**: sets Zappi → **Stop**
+              - At **05:50**: sets Zappi → **Eco+**
+              - Gated by `input_boolean.off_peak_zappi_control`
+
+              Previously used a normally-distributed random delay (~20 min / ~25 min)
+              to disguise switching pattern from Octopus. Removed for simplicity — see
+              automation description or git history to reinstate.
+
+              **Scripts called:** `zappi_set_stop` · `zappi_set_ecoplus`
+          - type: tile
+            entity: input_boolean.off_peak_zappi_control
+            name: Off-Peak Zappi Control Enabled
+            grid_options:
+              columns: full
+          - type: tile
+            entity: select.myenergi_zappi_22323585_charge_mode
+            name: Zappi Charge Mode
+            grid_options:
+              columns: full
+          - type: tile
+            entity: sensor.myenergi_zappi_22323585_power_ct_internal_load
+            name: Zappi Power (W)
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: button
+                name: Stop (Off-Peak ON)
+                icon: mdi:stop-circle
+                tap_action:
+                  action: call-service
+                  service: script.zappi_set_stop
+              - type: button
+                name: Eco+ (Off-Peak OFF)
+                icon: mdi:leaf-circle
+                tap_action:
+                  action: call-service
+                  service: script.zappi_set_ecoplus
+
+      - type: grid
+        cards:
+          - type: markdown
+            content: |
+              ## Off-Peak Eddi Boost Control
+              **Automation:** Off-Peak Charging — Eddi Boost Control
+
+              **Logic:**
+              - When `v2h_off_peak_charging_active` turns **on** (~23:30): calls `eddi_boost_heater_1`
+              - Every **30 minutes** while off-peak is active: renews the boost so it never expires
+              - When `v2h_off_peak_charging_active` turns **off** (~05:30): calls `eddi_boost_cancel`
+              - Daytime time_pattern ticks are no-ops (off_peak=off, cancel branch requires state_change trigger)
+
+              The Eddi has its own internal timer (23:30–05:30). This automation is belt-and-braces:
+              ensures start, keeps renewing, and cleans up at end.
+
+              **Scripts called:** `eddi_boost_heater_1` · `eddi_boost_cancel`
+          - type: tile
+            entity: binary_sensor.v2h_off_peak_charging_active
+            name: V2H Off-Peak Active (trigger)
+            grid_options:
+              columns: full
+          - type: tile
+            entity: select.myenergi_eddi_24456595_operating_mode
+            name: Eddi Operating Mode
+            grid_options:
+              columns: full
+          - type: tile
+            entity: sensor.myenergi_eddi_24456595_status
+            name: Eddi Status
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: tile
+            entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+            name: Eddi Power (W)
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: full
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_number.eddi_boost_minutes
+                name: Boost Duration (min)
+                icon: mdi:timer-outline
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: button
+                name: Boost Heater 1
+                icon: mdi:flash
+                tap_action:
+                  action: call-service
+                  service: script.eddi_boost_heater_1
+              - type: button
+                name: Cancel Boost
+                icon: mdi:stop-circle-outline
+                tap_action:
+                  action: call-service
+                  service: script.eddi_boost_cancel
+
+      - cards:
+          - type: heading
+            heading: History
+          - title: History
+            type: history-graph
+            hours_to_show: 36
+            entities:
+              - entity: binary_sensor.v2h_off_peak_charging_active
+              - entity: select.myenergi_eddi_24456595_operating_mode
+              - entity: sensor.myenergi_eddi_24456595_status
+              - entity: sensor.myenergi_eddi_24456595_internal_load_ct1
+              - entity: select.myenergi_zappi_22323585_charge_mode
+              - entity: sensor.myenergi_zappi_22323585_power_ct_internal_load
+            grid_options:
+              columns: full
+        column_span: 4
