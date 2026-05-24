@@ -525,5 +525,7 @@ views:
               - grid
               - overview
             show_only_totals: false
-            column_span: 4
+            grid_options:
+              columns: 24
+              rows: auto
         column_span: 4
