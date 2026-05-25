@@ -5,6 +5,8 @@
       entity_id: sensor.agile_export_current_rate
     - platform: state
       entity_id: input_number.smart_export_multiplier
+    - platform: state
+      entity_id: sensor.smart_export_effective_threshold
     - platform: time_pattern
       minutes: "/30"
   sensor:
@@ -32,7 +34,151 @@
     - name: "smart_export_status"
       state: >
         {% set export_rate = states('sensor.agile_export_current_rate') | float(0) %}
-        {% set cheapest   = states('sensor.agile_import_cheapest_rate') | float(0) %}
-        {% set multiplier = states('input_number.smart_export_multiplier') | float(200) %}
-        {% set threshold  = cheapest * (multiplier / 100) %}
+        {% set cheapest    = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {% set threshold   = states('sensor.smart_export_effective_threshold') | float(99) %}
         {{ 1 if export_rate > 0 and cheapest > 0 and export_rate >= threshold else 0 }}
+
+- trigger:
+    - platform: state
+      entity_id:
+        - sensor.v2h_soc
+        - number.v2h_smart_export_soc_min
+        - switch.v2h_smart_export_solar
+        - switch.v2h_export_excess_solar
+        - sensor.energy_production_today_remaining
+    - platform: time_pattern
+      minutes: "/30"
+  sensor:
+    - name: "smartexport_charge_remaining"
+      unit_of_measurement: "kWh"
+      state: >
+        {# Battery capacity: x101 rated_battery_capacity reads 52.3 kWh. This value
+           represents the usable range from 10% to 100% SoC (the EV reserves the
+           bottom 10%). Full physical capacity = 52.3 / 0.9 = 58.1 kWh. #}
+        {% set capacity_kwh = 58.1 %}
+        {% set soc     = states('sensor.v2h_soc') | float(0) %}
+        {% set soc_min = states('number.v2h_smart_export_soc_min') | float(30) %}
+        {{ [capacity_kwh * (soc - soc_min) / 100, 0] | max | round(2) }}
+
+    - name: "smartexport_charge_available_for_export"
+      unit_of_measurement: "kWh"
+      state: >
+        {# Same capacity derivation as smartexport_charge_remaining above #}
+        {% set capacity_kwh = 58.1 %}
+        {% set soc     = states('sensor.v2h_soc') | float(0) %}
+        {% set soc_min = states('number.v2h_smart_export_soc_min') | float(30) %}
+        {% set charge_remaining = [capacity_kwh * (soc - soc_min) / 100, 0] | max %}
+        {% set target = today_at("23:30") %}
+        {% if now() > target %}
+          {% set target = target + timedelta(days=1) %}
+        {% endif %}
+        {% set hours_until_charge = ((target - now()).total_seconds() / 3600) | float %}
+        {% set solar_kwh = 0 %}
+        {% if not is_state('switch.v2h_smart_export_solar', 'on')
+           and not is_state('switch.v2h_export_excess_solar', 'on') %}
+          {% set solar_kwh = states('sensor.energy_production_today_remaining') | float(0) %}
+        {% endif %}
+        {{ [charge_remaining - hours_until_charge + solar_kwh, 0] | max | round(2) }}
+
+- trigger:
+    - platform: state
+      entity_id:
+        - sensor.agile_export_current_day_rates
+        - sensor.smart_export_threshold
+        - sensor.smart_export_effective_threshold
+        - sensor.smartexport_charge_available_for_export
+        - sensor.agile_import_cheapest_rate
+        - number.v2h_smart_export_limit
+    - platform: time_pattern
+      minutes: "/30"
+  sensor:
+    - name: "smartexport_expected_export"
+      unit_of_measurement: "kWh"
+      state: >
+        {% set rates     = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+        {% set threshold = states('sensor.smart_export_threshold') | float(0) %}
+        {% set limit_kw  = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
+        {% set now_ts    = as_timestamp(now()) %}
+        {% set cutoff_ts = as_timestamp(today_at("23:30")) %}
+        {% set ns = namespace(total=0) %}
+        {% for r in rates %}
+          {% set start_ts = as_timestamp(r.start) %}
+          {% set end_ts   = as_timestamp(r.end) %}
+          {% if start_ts < cutoff_ts and end_ts > now_ts and r.value_inc_vat >= threshold %}
+            {% if start_ts <= now_ts %}
+              {# Current slot — only remaining time #}
+              {% set ns.total = ns.total + limit_kw * (end_ts - now_ts) / 3600 %}
+            {% else %}
+              {# Future slot — full 30 minutes #}
+              {% set ns.total = ns.total + limit_kw * 0.5 %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.total | round(2) }}
+
+    - name: "smartexport_expected_export_profit"
+      unit_of_measurement: "GBP"
+      state: >
+        {# Profit = export income minus cost to replenish at overnight charge rate.
+           16% round-trip loss (8% charge + 8% discharge): replenishment = export_kwh / 0.84 #}
+        {% set charge_rate = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {% set rates      = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+        {% set threshold  = states('sensor.smart_export_effective_threshold') | float(99) %}
+        {% set limit_kw   = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
+        {% set now_ts     = as_timestamp(now()) %}
+        {% set cutoff_ts  = as_timestamp(today_at("23:30")) %}
+        {% set ns = namespace(profit=0) %}
+        {% for r in rates %}
+          {% set start_ts = as_timestamp(r.start) %}
+          {% set end_ts   = as_timestamp(r.end) %}
+          {% if start_ts < cutoff_ts and end_ts > now_ts and r.value_inc_vat >= threshold %}
+            {% if start_ts <= now_ts %}
+              {% set hours = (end_ts - now_ts) / 3600 %}
+            {% else %}
+              {% set hours = 0.5 %}
+            {% endif %}
+            {% set export_kwh = limit_kw * hours %}
+            {% set ns.profit = ns.profit + export_kwh * r.value_inc_vat - (export_kwh / 0.84) * charge_rate %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.profit | round(3) }}
+
+    - name: "smart_export_effective_threshold"
+      unit_of_measurement: "GBP/kWh"
+      state: >
+        {% set rates     = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+        {% set threshold = states('sensor.smart_export_threshold') | float(0) %}
+        {% set limit_kw  = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
+        {% set available = states('sensor.smartexport_charge_available_for_export') | float(0) %}
+        {% set now_ts    = as_timestamp(now()) %}
+        {% set cutoff_ts = as_timestamp(today_at("23:30")) %}
+        {# Collect rates from future qualifying slots, sorted highest first #}
+        {% set ns = namespace(qualifying=[]) %}
+        {% for r in rates %}
+          {% if as_timestamp(r.start) > now_ts
+             and as_timestamp(r.start) < cutoff_ts
+             and r.value_inc_vat >= threshold %}
+            {% set ns.qualifying = ns.qualifying + [r.value_inc_vat] %}
+          {% endif %}
+        {% endfor %}
+        {% set sorted_rates = ns.qualifying | sort(reverse=True) %}
+        {# Walk highest rates first; keep slots until available capacity is exhausted.
+           effective stays at the rate of the last slot that fit.
+           If nothing fits (available too low), returns a very high value to block export. #}
+        {% set ns2 = namespace(accumulated=0, effective=threshold, full=false) %}
+        {% for rate in sorted_rates %}
+          {% if not ns2.full %}
+            {% if ns2.accumulated + limit_kw * 0.5 <= available %}
+              {% set ns2.accumulated = ns2.accumulated + limit_kw * 0.5 %}
+              {% set ns2.effective   = rate %}
+            {% else %}
+              {% set ns2.full = true %}
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {% if ns2.accumulated == 0 and ns2.full %}
+          {# Available charge too low for even one slot — block all export #}
+          {{ 99 }}
+        {% else %}
+          {{ ns2.effective | round(4) }}
+        {% endif %}
