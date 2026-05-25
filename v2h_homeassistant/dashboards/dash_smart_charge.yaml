@@ -80,16 +80,33 @@ views:
       - type: grid
         cards:
           - type: markdown
-            content: |
+            content: >
               ## SmartCharge & SmartExport → Eddi Boost Control
 
-              **Automation:** Publish SmartCharge & SmartExport → Eddi Boost Control
 
-              Turns Eddi boost ON when smart charge is active and smart export is not.
+              **Automation:** Publish SmartCharge & SmartExport → Eddi Boost
+              Control
+
+
+              Turns Eddi boost ON when smart charge is active and smart export
+              is not.
+
               Turns OFF when smart charge ends or smart export overrides.
-              Does **not** cancel if V2H off-peak is active — overnight automation owns the Eddi.
 
-              Settings → Automations → Publish SmartCharge & SmartExport → Eddi Boost Control
+              Does **not** cancel if V2H off-peak is active — overnight
+              automation owns the Eddi.
+
+
+              Settings → Automations → Publish SmartCharge & SmartExport → Eddi
+              Boost Control
+          - type: entities
+            title: Smart Charge Sensors
+            show_header_toggle: false
+            entities:
+              - entity: sensor.smartcharge_status
+                name: Smart Charge Status (new)
+              - entity: sensor.smart_export_status
+              - entity: binary_sensor.v2h_off_peak_charging_active
           - type: tile
             entity: select.myenergi_eddi_24456595_operating_mode
             grid_options:
@@ -98,6 +115,12 @@ views:
             grid_options:
               columns: full
             entity: sensor.myenergi_eddi_24456595_status
+            vertical: false
+            features_position: bottom
+          - type: tile
+            grid_options:
+              columns: full
+            entity: sensor.eddi_last_temp_reached
             vertical: false
             features_position: bottom
           - type: tile

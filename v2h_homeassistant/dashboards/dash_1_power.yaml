@@ -126,7 +126,7 @@ views:
                         connection_entity_id: sensor.myenergi_harvi_2350998_grid_ct3_export
                     entity_id: sensor.sdm230indra_sdm230indra_power_export
                     name: Battery (Blue)
-                    color: '#f06292'
+                    color: '#80cbc4'
               - entities:
                   - type: entity
                     children:
@@ -252,7 +252,7 @@ views:
                     children: []
                     entity_id: sensor.myenergi_eddi_24456595_internal_load_ct1
                     name: Water Heater
-                    color: '#00bcd4'
+                    color: '#e57373'
                   - type: entity
                     children: []
                     entity_id: >-
@@ -263,12 +263,12 @@ views:
                     children: []
                     entity_id: sensor.smart_meter_electricity_power_selected_export
                     name: Grid (Net Export)
-                    color: '#43a047 '
+                    color: '#5b9ec9'
                   - type: entity
                     children: []
                     entity_id: sensor.sdm230indra_sdm230indra_power_import
                     name: Battery
-                    color: '#f06292'
+                    color: '#80cbc4'
             gas_co2_intensity: 2351.6459999999997
             show_names: true
             energy_date_selection: false

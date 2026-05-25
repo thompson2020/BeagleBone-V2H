@@ -20,6 +20,11 @@ triggers:
       - sensor.smart_export_status
     for:
       seconds: 1
+  - trigger: state
+    entity_id: sensor.myenergi_eddi_24456595_status
+    from: unavailable
+    for:
+      seconds: 30
 actions:
   - choose:
       - conditions:

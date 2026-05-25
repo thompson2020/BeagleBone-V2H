@@ -55,7 +55,7 @@ views:
                 - entity: sensor.myenergi_eddi_24456595_energy_used_today
                   name: Water
                   icon: mdi:water-boiler
-                  color: '#00bcd4'
+                  color: '#e57373'
                   color_icon: true
                   secondary_info:
                     entity: sensor.myenergi_eddi_24456595_internal_load_ct1
@@ -134,7 +134,7 @@ views:
                     children:
                       - House
                     name: Grid(Peak)
-                    color: '#EB8CE6'
+                    color: '#ff80c0'
                   - type: entity
                     entity_id: sensor.energy_import_iog_offpeak
                     children:
@@ -144,7 +144,7 @@ views:
                         connection_entity_id: sensor.eddi_energy_offpeak
                       - sensor.sdm230indra_sdm230indra_import
                     name: Grid(Off Peak)
-                    color: '#00CD96'
+                    color: '#5b9ec9'
                   - type: entity
                     entity_id: input_number.solar_generation_yellow_kwh
                     children:
@@ -169,7 +169,7 @@ views:
                       - House
                       - sensor.smart_meter_electricity_export
                     name: Battery (Blue)
-                    color: '#f06292'
+                    color: '#80cbc4'
               - entities:
                   - type: remaining_parent_state
                     entity_id: House
@@ -185,17 +185,17 @@ views:
                     entity_id: sensor.myenergi_eddi_24456595_energy_used_today
                     children: []
                     name: Water Heater
-                    color: '#00bcd4'
+                    color: '#e57373'
                   - type: entity
                     entity_id: sensor.smart_meter_electricity_export
                     children: []
                     name: Grid(Net Export)
-                    color: '#43a047'
+                    color: '#5b9ec9'
                   - type: entity
                     entity_id: sensor.sdm230indra_sdm230indra_import
                     children: []
                     name: Battery(Charge)
-                    color: '#f06292'
+                    color: '#80cbc4'
                 sort_by: none
                 sort_group_by_parent: false
             gas_co2_intensity: 2351.6459999999997
@@ -272,9 +272,9 @@ views:
                   card_mod:
                     style: |
                       ha-card {
-                        border-top: 4px solid #00cf95;
+                        border-top: 4px solid #5b9ec9;
                       }
-                      .value { color: #00cf95 !important; }
+                      .value { color: #5b9ec9 !important; }
                 - type: statistic
                   entity: sensor.energy_import_iog_peak
                   name: Peak
@@ -306,9 +306,9 @@ views:
                   card_mod:
                     style: |
                       ha-card {
-                        border-top: 4px solid #42a5f5;
+                        border-top: 4px solid #80cbc4;
                       }
-                      .value { color: #42a5f5 !important; }
+                      .value { color: #80cbc4 !important; }
                 - type: statistic
                   entity: sensor.sdm230indra_sdm230indra_import
                   name: Battery charge
@@ -323,9 +323,9 @@ views:
                   card_mod:
                     style: |
                       ha-card {
-                        border-top: 4px solid #42a5f5;
+                        border-top: 4px solid #80cbc4;
                       }
-                      .value { color: #42a5f5 !important; }
+                      .value { color: #80cbc4 !important; }
                 - type: statistic
                   entity: sensor.smart_meter_electricity_export
                   name: Export
@@ -340,9 +340,9 @@ views:
                   card_mod:
                     style: |
                       ha-card {
-                        border-top: 4px solid #ff80c0;
+                        border-top: 4px solid #5b9ec9;
                       }
-                      .value { color: #ff80c0 !important; }
+                      .value { color: #5b9ec9 !important; }
           - type: custom:config-template-card
             grid_options:
               columns: full
@@ -413,7 +413,7 @@ views:
                 - entity: sensor.energy_import_iog_offpeak
                   name: Off peak
                   type: column
-                  color: '#00cf95'
+                  color: '#5b9ec9'
                   unit: ' kWh'
                   stack_group: energy
                   group_by:
@@ -431,7 +431,7 @@ views:
                 - entity: sensor.sdm230indra_sdm230indra_export
                   name: Battery discharge
                   type: column
-                  color: '#42a5f5'
+                  color: '#80cbc4'
                   unit: ' kWh'
                   stack_group: energy
                   group_by:
@@ -440,7 +440,7 @@ views:
                 - entity: sensor.sdm230indra_sdm230indra_import
                   name: Battery charge
                   type: column
-                  color: '#42a5f5'
+                  color: '#80cbc4'
                   unit: ' kWh'
                   stack_group: energy
                   transform: return x * -1;
@@ -450,7 +450,7 @@ views:
                 - entity: sensor.smart_meter_electricity_export
                   name: Export
                   type: column
-                  color: '#ff80c0'
+                  color: '#5b9ec9'
                   unit: ' kWh'
                   stack_group: energy
                   transform: return x * -1;
