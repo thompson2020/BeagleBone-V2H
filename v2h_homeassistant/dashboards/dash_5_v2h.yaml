@@ -203,8 +203,12 @@ views:
                   color: var(--primary-text-color);
                 }
 
+                ha-card > div {
+                  position: relative;
+                }
+
                 /* Top-right small metrics */
-                ha-card::after {
+                ha-card > div::after {
                   content: "{{ states('sensor.v2h_pre_temperature') | float | round(1) }}°C  |  {{ states('sensor.v2h_pre_fan_duty') | float | round(0) }}%";
                   position: absolute;
                   top: 8px;
@@ -1166,12 +1170,12 @@ views:
                 position: top
               annotations:
                 yaxis:
-                  - 'y': 40.1
+                  - 'y': 50
                     yAxisIndex: 0
                     borderColor: '#f59e0b'
                     strokeDashArray: 4
                     opacity: 0.6
-                  - 'y': 48
+                  - 'y': 70
                     yAxisIndex: 0
                     borderColor: '#ef4444'
                     strokeDashArray: 4
