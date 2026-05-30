@@ -89,6 +89,7 @@
         - sensor.smartexport_charge_available_for_export
         - sensor.agile_import_cheapest_rate
         - number.v2h_smart_export_limit
+        - input_number.smart_export_multiplier
     - platform: time_pattern
       minutes: "/30"
   sensor:

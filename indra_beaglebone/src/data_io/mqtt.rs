@@ -119,9 +119,22 @@ pub async fn mqtt_task(mqtt_config: MqttConfig, mode_tx: ChademoTx) -> Result<()
 
     let publish_client = client.clone();
     let publish_config = mqtt_config.clone();
+    let mut avail_tick: u32 = 0;
 
     loop {
         sleep(Duration::from_secs(1)).await;
+
+        // Republish availability every 30 seconds so HA picks it up after restart
+        // without needing the BeagleBone to reconnect.
+        avail_tick += 1;
+        if avail_tick >= 30 {
+            avail_tick = 0;
+            let avail_topic = format!("{}/availability", publish_config.base_topic);
+            let avail_client = publish_client.clone();
+            tokio::spawn(async move {
+                let _ = avail_client.publish(avail_topic, QoS::AtLeastOnce, true, "online").await;
+            });
+        }
 
         let snap = super::status::snapshot().await;
         let msg = match serde_json::to_string(&snap) {
@@ -325,7 +338,7 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
         ("beaglebone_v2h_efficiency_pct",         "Efficiency",
          "{{ value_json.meter.efficiency | default(0) | round(1) }}", "%", ""),
         ("beaglebone_v2h_pre_temp_c",             "PRE Temperature",
-         "{{ value_json.pre.temp | round(1) }}", "degC", "temperature"),
+         "{{ value_json.pre.temp | round(1) }}", "°C", "temperature"),
         ("beaglebone_v2h_pre_fan_duty_pct",       "PRE Fan Duty",
          "{{ value_json.pre.fan_duty }}", "%", ""),
         ("beaglebone_v2h_charging_current_req_a", "EV Current Request (x102)",

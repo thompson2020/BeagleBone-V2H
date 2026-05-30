@@ -9,37 +9,46 @@ views:
         cards:
           - type: custom:mushroom-template-card
             primary: >
-              {% set mode = states('sensor.v2h_operation_mode') %}
-              {% if   mode == 'V2h'       %}V2H
-              {% elif mode == 'Charge'    %}Charging
-              {% elif mode == 'Discharge' %}Discharging
-              {% elif mode == 'Idle'      %}Idle
-              {% else %}{{ mode }}{% endif %}
+              {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
+              == 'V2h'       %}V2H {% elif mode == 'Charge'    %}Charging {%
+              elif mode == 'Discharge' %}Discharging {% elif mode == 'Idle'     
+              %}Idle {% else %}{{ mode }}{% endif %}
             secondary: >
-              {% set soc              = states('sensor.v2h_soc')                   | float(0) %}
-              {% set dc_amps          = states('sensor.v2h_dc_output_amps')        | float(0) %}
-              {% set grid_w           = states('sensor.v2h_grid_power')            | float(0) %}
-              {% set rtd_soc          = states('number.v2h_rtd_soc')               | float(90) %}
-              {% set offpeak_soc_max  = states('number.v2h_soc_max_boost')         | float(80) %}
-              {% set charge_soc_limit = states('number.v2h_charge_soc_limit')      | float(80) %}
-              {% set export_soc_min   = states('number.v2h_smart_export_soc_min')  | float(30) %}
-              {% set v2h_soc_max      = states('number.v2h_soc_max')               | float(90) %}
-              {% set v2h_soc_min      = states('number.v2h_soc_min')               | float(30) %}
-              {% set solar_flag       = is_state('switch.v2h_export_excess_solar', 'on')
+              {% set soc              =
+              states('sensor.v2h_soc')                   | float(0) %} {% set
+              dc_amps          = states('sensor.v2h_dc_output_amps')        |
+              float(0) %} {% set grid_w           =
+              states('sensor.v2h_grid_power')            | float(0) %} {% set
+              rtd_soc          = states('number.v2h_rtd_soc')               |
+              float(90) %} {% set offpeak_soc_max  =
+              states('number.v2h_soc_max_boost')         | float(80) %} {% set
+              charge_soc_limit = states('number.v2h_charge_soc_limit')      |
+              float(80) %} {% set export_soc_min   =
+              states('number.v2h_smart_export_soc_min')  | float(30) %} {% set
+              v2h_soc_max      = states('number.v2h_soc_max')               |
+              float(90) %} {% set v2h_soc_min      =
+              states('number.v2h_soc_min')               | float(30) %} {% set
+              solar_flag       = is_state('switch.v2h_export_excess_solar',
+              'on')
                                      or is_state('binary_sensor.v2h_smart_export_solar_active', 'on') %}
-              {% if   is_state('binary_sensor.v2h_ready_to_drive_active',   'on') %}
+              {% if   is_state('binary_sensor.v2h_ready_to_drive_active',  
+              'on') %}
                 {% set label = 'Ready to Drive' %}
                 {% set q = '(Holding)' if soc >= rtd_soc else '' %}
-              {% elif is_state('binary_sensor.v2h_off_peak_charging_active','on') %}
+              {% elif
+              is_state('binary_sensor.v2h_off_peak_charging_active','on') %}
                 {% set label = 'Off-Peak Charging' %}
                 {% set q = '(at max)' if soc >= offpeak_soc_max else '' %}
-              {% elif is_state('binary_sensor.v2h_smart_export_active',     'on') %}
+              {% elif is_state('binary_sensor.v2h_smart_export_active',    
+              'on') %}
                 {% set label = 'Smart Export' %}
                 {% set q = '(at min)' if soc <= export_soc_min else '' %}
-              {% elif is_state('binary_sensor.v2h_smart_charge_active',     'on') %}
+              {% elif is_state('binary_sensor.v2h_smart_charge_active',    
+              'on') %}
                 {% set label = 'Smart Charge' %}
                 {% set q = '(at max)' if soc >= charge_soc_limit else '' %}
-              {% elif is_state('binary_sensor.v2h_ev_drain_protection_active','on') %}
+              {% elif
+              is_state('binary_sensor.v2h_ev_drain_protection_active','on') %}
                 {% set label = 'EV Drain Protection' %}
                 {% set q = '' %}
               {% elif is_state('switch.v2h_self_use', 'on') %}
@@ -53,8 +62,7 @@ views:
               {% else %}
                 {% set label = '—' %}
                 {% set q = '' %}
-              {% endif %}
-              {{ label }}{% if q %} {{ q }}{% endif %}
+              {% endif %} {{ label }}{% if q %} {{ q }}{% endif %}
             icon: >
               {% set mode = states('sensor.v2h_operation_mode') %} {% if   mode
               == 'V2h'       %}mdi:home-battery {% elif mode == 'Charge'   
@@ -208,8 +216,10 @@ views:
                 }
 
                 /* Top-right small metrics */
+
+
                 ha-card > div::after {
-                  content: "{{ states('sensor.v2h_pre_temperature') | float | round(1) }}°C  |  {{ states('sensor.v2h_pre_fan_duty') | float | round(0) }}%";
+                  content: "{{ (states('sensor.beaglebone_v2h_pre_temp_c') not in ['unknown','unavailable'] and (states('sensor.beaglebone_v2h_pre_temp_c')|float|round(1) ~ '°C') or 'N/A') }} | {{ (states('sensor.v2h_pre_fan_duty') not in ['unknown','unavailable'] and (states('sensor.v2h_pre_fan_duty')|float|round(0) ~ '%') or 'N/A') }}";
                   position: absolute;
                   top: 8px;
                   right: 10px;
@@ -288,7 +298,6 @@ views:
                   font-size: 11px;
                   color: var(--secondary-text-color);
                 }
-
             segments:
               - from: -6000
                 color: var(--blue-color)
@@ -414,6 +423,16 @@ views:
               columns: 6
               rows: 1.5
             name: ''
+          - type: horizontal-stack
+            cards:
+              - type: glance
+                entities:
+                  - entity: sensor.v2h_pre_fan_duty
+                  - entity: sensor.beaglebone_v2h_pre_temp_c
+          - type: tile
+            entity: sensor.v2h_grid_phase_power
+            vertical: false
+            features_position: bottom
       - type: grid
         cards:
           - type: custom:expander-card
@@ -1181,7 +1200,7 @@ views:
                     strokeDashArray: 4
                     opacity: 0.6
             series:
-              - entity: sensor.v2h_pre_temperature
+              - entity: sensor.beaglebone_v2h_pre_temp_c
                 name: Temp (degC)
                 color: '#f59e0b'
                 type: line
@@ -1204,7 +1223,7 @@ views:
             hours_to_show: 24
             entities:
               - sensor.v2h_pre_fan_duty
-              - sensor.v2h_pre_temperature
+              - sensor.beaglebone_v2h_pre_temp_c
       - type: grid
         cards:
           - type: heading

@@ -94,17 +94,6 @@ views:
             allow_layout_break: false
           - type: energy-date-selection
             vertical_opening_direction: auto
-          - type: custom:energy-period-selector-plus
-            card_background: true
-            today_button: true
-            prev_next_buttons: true
-            compare_button_type: ''
-            today_button_type: text
-            period_buttons:
-              - week
-              - month
-              - year
-              - day
       - type: grid
         cards:
           - type: custom:sankey-chart
@@ -465,7 +454,18 @@ views:
                   stroke_width: 2
                   stroke_dash: 5
                   extend_to: false
-                  offset: '-15min'
+                  unit: ' kWh'
+                  group_by:
+                    func: diff
+                    duration: 30min
+                - entity: sensor.myenergi_zappi_22323585_energy_used_today
+                  name: House consumption
+                  type: line
+                  color: '#43a047'
+                  curve: smooth
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
                   unit: ' kWh'
                   group_by:
                     func: diff

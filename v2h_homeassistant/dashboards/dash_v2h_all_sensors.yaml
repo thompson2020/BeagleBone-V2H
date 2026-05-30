@@ -51,7 +51,7 @@ views:
           - type: tile
             entity: sensor.v2h_pre_state
           - type: tile
-            entity: sensor.v2h_pre_temperature
+            entity: sensor.beaglebone_v2h_pre_temp_c
           - type: tile
             entity: binary_sensor.v2h_ready_to_drive_active
           - type: tile
