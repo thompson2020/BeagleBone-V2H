@@ -239,8 +239,9 @@ async fn shutdown(chademo: &mut Chademo, can: &mut CANSocket) {
         if matches!(chademo.pins().k.get_value(), Ok(0)) {
             log::info!("Awaiting K line release");
             continue; // back to top of loop -- wait for K line to drop before opening contactors and cutting power
-            log::info!("K line released");
+            
         };
+        log::info!("K line released");
         if contactors {
             log::info!("Contactors opening");
             if chademo.pins().c1.set_value(0).is_ok() {
@@ -589,7 +590,16 @@ async fn v2h_requested_amps(
                 log::info!("Smart export SoC ceiling hit ({}% >= {}%), holding discharge-only", soc, soc_max);
             }
             *dv = dv.clamp(lower, upper);
-            pid_step(dv, last_amps, last_meter, inner_tick, lower, upper, export_limit_w, "export").await
+            let meter_snap = METER.read().await;
+            let phase_correction = match (meter_snap.phase_w, meter_snap.total_w) {
+                (Some(phase), Some(total)) => phase - total,
+                _ => {
+                    log::warn!("Smart export: phase_w unavailable, falling back to total_w for export limit");
+                    0.0
+                }
+            };
+            drop(meter_snap);
+            pid_step(dv, last_amps, last_meter, inner_tick, lower, upper, export_limit_w + phase_correction, "export").await
         }
     } else if smart_charge_active {
         *dv = 0.0;
