@@ -301,8 +301,9 @@ async fn charge_mode(
     let mut last_meter = 0.01;
     let mut counter = 0;
     let mut last_faults = chademo_v2::X102Faults::default();
-    let mut pre_diverge_since:  Option<Instant> = None;
-    let mut pre_diverge_logged: bool            = false;
+    let mut pre_diverge_since:   Option<Instant> = None;
+    let mut pre_diverge_logged:  bool            = false;
+    let mut pre_reenable_sent_at: Option<Instant> = None;
 
     // PID state -- shared across all meter-based modes.
     let mut dv: f32 = 0.0;
@@ -413,21 +414,37 @@ async fn charge_mode(
             let pre_sp      = pre.get_dc_setpoint_amps();
             let pre_act     = pre.get_dc_output_amps();
             let pre_enabled = pre.enabled();
+            let pre_status  = *pre.get_status();
             drop(pre);
             if (pre_sp - pre_act).abs() > 0.2 {
                 let since = pre_diverge_since.get_or_insert_with(Instant::now);
                 if !pre_diverge_logged && since.elapsed().as_secs() >= 10 {
-                    log::info!("PRE amps divergence >10s | SP={:.1}A actual={:.1}A diff={:.1}A enabled={}",
-                        pre_sp, pre_act, (pre_sp - pre_act).abs(), pre_enabled);
+                    log::info!("PRE amps divergence >10s | SP={:.1}A actual={:.1}A diff={:.1}A enabled={} status=[0x{:02x},0x{:02x}]",
+                        pre_sp, pre_act, (pre_sp - pre_act).abs(), pre_enabled, pre_status[0], pre_status[1]);
                     pre_diverge_logged = true;
+                    if !pre_enabled && pre_reenable_sent_at.is_none() {
+                        log::info!("PRE self-disabled during V2H session — sending Enable command, will abort in 30s if no recovery");
+                        log_error!("PRE re-enable send", pre_tx.send(PreCommand::Enable).await);
+                        pre_reenable_sent_at = Some(Instant::now());
+                    }
                 }
             } else {
                 if pre_diverge_logged {
-                    log::info!("PRE amps divergence resolved | SP={:.1}A actual={:.1}A",
-                        pre_sp, pre_act);
+                    if pre_reenable_sent_at.take().is_some() {
+                        log::info!("PRE re-enable successful — divergence cleared | SP={:.1}A actual={:.1}A", pre_sp, pre_act);
+                    } else {
+                        log::info!("PRE amps divergence resolved | SP={:.1}A actual={:.1}A", pre_sp, pre_act);
+                    }
                 }
                 pre_diverge_since  = None;
                 pre_diverge_logged = false;
+            }
+            if let Some(sent_at) = pre_reenable_sent_at {
+                if !pre_enabled && sent_at.elapsed().as_secs() >= 30 {
+                    log::warn!("PRE did not re-enable after 30s | status=[0x{:02x},0x{:02x}] — aborting V2H session",
+                        pre_status[0], pre_status[1]);
+                    break Idle;
+                }
             }
         }
 

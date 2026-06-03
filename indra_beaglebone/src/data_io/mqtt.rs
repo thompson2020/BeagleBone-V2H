@@ -359,6 +359,8 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
          "{{ value_json.pre.dc_bus_volts | round(1) }}", "V", "voltage"),
         ("beaglebone_v2h_ev_min_discharge_volts", "EV Min Discharge Volts",
          "{{ value_json.chademo.x200.minimum_discharge_voltage | round(0) | int }}", "V", "voltage"),
+        ("beaglebone_v2h_pre_amps_setpoint",      "PRE Amps Setpoint",
+         "{{ value_json.pre.dc_output_amps_setpoint | round(1) }}", "A", "current"),
     ];
     for &(id, name, tpl, unit, dc) in sensors {
         let mut payload = json!({
@@ -384,6 +386,8 @@ async fn publish_discovery(client: &AsyncClient, cfg: &MqttConfig) {
     let text_sensors: &[(&str, &str, &str)] = &[
         ("beaglebone_v2h_operation_mode", "Operation Mode", "{{ value_json.chademo.state }}"),
         ("beaglebone_v2h_pre_state",      "PRE State",      "{{ value_json.pre.state }}"),
+        ("beaglebone_v2h_pre_status",     "PRE Status Word",
+         "{{ \"0x%02x,0x%02x\" | format(value_json.pre.status[0], value_json.pre.status[1]) }}"),
         ("beaglebone_v2h_active_mode",    "Active Mode",
          "{% if value_json.supervisory.ready_to_drive_active %}Ready to Drive\
 {% elif value_json.supervisory.off_peak_charging_active %}Off-Peak\
