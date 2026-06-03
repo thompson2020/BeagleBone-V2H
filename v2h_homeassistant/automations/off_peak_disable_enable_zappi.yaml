@@ -1,19 +1,24 @@
 alias: Off-Peak Charging — Disable/Enable Zappi
 description: >
-  Disables Zappi at 23:10 and re-enables it at 05:50. Gated by
+  Disables Zappi before 23:30 and re-enables it after 05:30. Gated by
   input_boolean.off_peak_zappi_control.
 
-  Previously used a normally-distributed random delay (~20 min after 22:50 for off,
-  ~25 min after 04:50 for on) to disguise the EV as a dumb charger to Octopus.
-  Removed as fixed times are simpler and more predictable.
-  To reinstate: change triggers back to 22:50/04:50, set mode to parallel, and
-  restore the delay+re-check blocks from git history before each script call.
+  Uses a normally-distributed random delay (sum of two uniform samples, CLT
+  approximation) to disguise the EV as a dumb charger to Octopus:
+    - Off: trigger 23:00, mean ~10 min delay → average action ~23:10 ± 10 min
+    - On:  trigger 05:40, mean ~10 min delay → average action ~05:50 ± 10 min
+
+  After each delay a re-check confirms the gate switch is still on before
+  calling the script, preventing stale triggers from acting if the switch was
+  turned off during the delay window. Mode is parallel so both branches can
+  run independently without blocking each other.
+
 triggers:
   - trigger: time
-    at: "23:10:00"
+    at: "23:00:00"
     id: zappi_off
   - trigger: time
-    at: "05:50:00"
+    at: "05:40:00"
     id: zappi_on
 conditions:
   - condition: state
@@ -25,10 +30,30 @@ actions:
           - condition: trigger
             id: zappi_off
         sequence:
+          - delay:
+              seconds: >
+                {{ (range(0, 600)|random + range(0, 600)|random) | int }}
+          - condition: state
+            entity_id: input_boolean.off_peak_zappi_control
+            state: "on"
           - action: script.zappi_set_stop
+          - action: logbook.log
+            data:
+              name: Zappi — Off-Peak
+              message: Zappi stopped for off-peak V2H window
       - conditions:
           - condition: trigger
             id: zappi_on
         sequence:
+          - delay:
+              seconds: >
+                {{ (range(0, 600)|random + range(0, 600)|random) | int }}
+          - condition: state
+            entity_id: input_boolean.off_peak_zappi_control
+            state: "on"
           - action: script.zappi_set_ecoplus
-mode: single
+          - action: logbook.log
+            data:
+              name: Zappi — Off-Peak
+              message: Zappi re-enabled (eco+) after off-peak V2H window
+mode: parallel

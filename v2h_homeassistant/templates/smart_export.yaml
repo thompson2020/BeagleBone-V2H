@@ -97,8 +97,12 @@
       unit_of_measurement: "kWh"
       state: >
         {% set rates     = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
-        {% set threshold = states('sensor.smart_export_threshold') | float(0) %}
+        {% set threshold = states('sensor.smart_export_effective_threshold') | float(0) %}
         {% set limit_kw  = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
+        {# Export is phase-controlled; other phases draw ~0.6 kW continuously,
+           reducing net grid export below the phase limit. #}
+        {% set other_phases_kw = 0.6 %}
+        {% set net_export_kw = [limit_kw - other_phases_kw, 0] | max %}
         {% set now_ts    = as_timestamp(now()) %}
         {% set cutoff_ts = as_timestamp(today_at("23:30")) %}
         {% set ns = namespace(total=0) %}
@@ -108,26 +112,45 @@
           {% if start_ts < cutoff_ts and end_ts > now_ts and r.value_inc_vat >= threshold %}
             {% if start_ts <= now_ts %}
               {# Current slot — only remaining time #}
-              {% set ns.total = ns.total + limit_kw * (end_ts - now_ts) / 3600 %}
+              {% set ns.total = ns.total + net_export_kw * (end_ts - now_ts) / 3600 %}
             {% else %}
               {# Future slot — full 30 minutes #}
-              {% set ns.total = ns.total + limit_kw * 0.5 %}
+              {% set ns.total = ns.total + net_export_kw * 0.5 %}
             {% endif %}
           {% endif %}
         {% endfor %}
         {{ ns.total | round(2) }}
+      attributes:
+        rates: >
+          {% set all_rates = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+          {% set threshold = states('sensor.smart_export_effective_threshold') | float(0) %}
+          {% set now_ts    = as_timestamp(now()) %}
+          {% set cutoff_ts = as_timestamp(today_at("23:30")) %}
+          {% set ns = namespace(slots=[]) %}
+          {% for r in all_rates %}
+            {% set start_ts = as_timestamp(r.start) %}
+            {% set end_ts   = as_timestamp(r.end) %}
+            {% if start_ts < cutoff_ts and end_ts > now_ts and r.value_inc_vat >= threshold %}
+              {% set ns.slots = ns.slots + [{'start': r.start, 'end': r.end, 'value_inc_vat': r.value_inc_vat}] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.slots }}
 
     - name: "smartexport_expected_export_profit"
       unit_of_measurement: "GBP"
       state: >
         {# Profit = export income minus cost to replenish at overnight charge rate.
-           16% round-trip loss (8% charge + 8% discharge): replenishment = export_kwh / 0.84 #}
-        {% set charge_rate = states('sensor.agile_import_cheapest_rate') | float(0) %}
-        {% set rates      = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
-        {% set threshold  = states('sensor.smart_export_effective_threshold') | float(99) %}
-        {% set limit_kw   = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
-        {% set now_ts     = as_timestamp(now()) %}
-        {% set cutoff_ts  = as_timestamp(today_at("23:30")) %}
+           Export is phase-controlled: battery discharges at limit_kw but other phases
+           draw ~0.6 kW so net grid export (what Octopus pays for) = limit_kw - 0.6.
+           16% round-trip loss (8% charge + 8% discharge): replenishment = discharge_kwh / 0.84 #}
+        {% set charge_rate    = states('sensor.agile_import_cheapest_rate') | float(0) %}
+        {% set rates          = state_attr('sensor.agile_export_current_day_rates', 'rates') | default([], true) %}
+        {% set threshold      = states('sensor.smart_export_effective_threshold') | float(99) %}
+        {% set limit_kw       = states('number.v2h_smart_export_limit') | float(0) / 1000 %}
+        {% set other_phases_kw = 0.6 %}
+        {% set net_export_kw  = [limit_kw - other_phases_kw, 0] | max %}
+        {% set now_ts         = as_timestamp(now()) %}
+        {% set cutoff_ts      = as_timestamp(today_at("23:30")) %}
         {% set ns = namespace(profit=0) %}
         {% for r in rates %}
           {% set start_ts = as_timestamp(r.start) %}
@@ -138,8 +161,9 @@
             {% else %}
               {% set hours = 0.5 %}
             {% endif %}
-            {% set export_kwh = limit_kw * hours %}
-            {% set ns.profit = ns.profit + export_kwh * r.value_inc_vat - (export_kwh / 0.84) * charge_rate %}
+            {% set export_kwh    = net_export_kw * hours %}
+            {% set discharge_kwh = limit_kw * hours %}
+            {% set ns.profit = ns.profit + export_kwh * r.value_inc_vat - (discharge_kwh / 0.84) * charge_rate %}
           {% endif %}
         {% endfor %}
         {{ ns.profit | round(3) }}
@@ -153,10 +177,13 @@
         {% set available = states('sensor.smartexport_charge_available_for_export') | float(0) %}
         {% set now_ts    = as_timestamp(now()) %}
         {% set cutoff_ts = as_timestamp(today_at("23:30")) %}
-        {# Collect rates from future qualifying slots, sorted highest first #}
+        {# Collect qualifying slots that haven't ended yet (includes current slot),
+           sorted highest first. Using end > now rather than start > now so the
+           current slot is included in capacity planning — excluding it caused the
+           effective threshold to jump above the current rate mid-slot. #}
         {% set ns = namespace(qualifying=[]) %}
         {% for r in rates %}
-          {% if as_timestamp(r.start) > now_ts
+          {% if as_timestamp(r.end) > now_ts
              and as_timestamp(r.start) < cutoff_ts
              and r.value_inc_vat >= threshold %}
             {% set ns.qualifying = ns.qualifying + [r.value_inc_vat] %}
@@ -180,6 +207,10 @@
         {% if ns2.accumulated == 0 and ns2.full %}
           {# Available charge too low for even one slot — block all export #}
           {{ 99 }}
+        {% elif not ns2.full %}
+          {# All qualifying slots fit — no capacity constraint, show all slots green #}
+          {{ threshold | round(5) }}
         {% else %}
-          {{ ns2.effective | round(4) }}
+          {# Capacity limited — raise threshold to exclude the lowest slots that won't fit #}
+          {{ (ns2.effective - 0.00001) | round(5) }}
         {% endif %}

@@ -8,26 +8,28 @@ views:
 
       - type: grid
         cards:
+          - type: tile
+            entity: input_boolean.off_peak_zappi_control
+            name: Off-Peak Zappi Control Enabled
+            grid_options:
+              columns: full
           - type: markdown
             content: |
               ## Off-Peak Zappi Control
               **Automation:** Off-Peak Charging — Disable/Enable Zappi
 
               **Logic:**
-              - At **23:10**: sets Zappi → **Stop**
-              - At **05:50**: sets Zappi → **Eco+**
+              - **~23:10 ± 10 min**: sets Zappi → **Stop** (trigger 23:00 + random delay)
+              - **~05:50 ± 10 min**: sets Zappi → **Eco+** (trigger 05:40 + random delay)
               - Gated by `input_boolean.off_peak_zappi_control`
+              - Re-checks gate after delay — no action if switch turned off during wait
 
-              Previously used a normally-distributed random delay (~20 min / ~25 min)
-              to disguise switching pattern from Octopus. Removed for simplicity — see
-              automation description or git history to reinstate.
+              Delay uses sum of two uniform samples (CLT approximation of normal distribution,
+              std dev ≈ 4 min) to disguise fixed switching pattern from Octopus Intelligent.
+
+              Exact trigger times visible in **Logbook** (filter: *Zappi — Off-Peak*).
 
               **Scripts called:** `zappi_set_stop` · `zappi_set_ecoplus`
-          - type: tile
-            entity: input_boolean.off_peak_zappi_control
-            name: Off-Peak Zappi Control Enabled
-            grid_options:
-              columns: full
           - type: tile
             entity: select.myenergi_zappi_22323585_charge_mode
             name: Zappi Charge Mode
